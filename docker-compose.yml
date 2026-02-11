@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  optical-calculator:
+    build: .
+    container_name: optical-link-calculator
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./saved_calculations:/app/saved_calculations
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    
+  # Optional: Nginx for production serving
+  nginx:
+    image: nginx:alpine
+    container_name: optical-calc-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - optical-calculator
+    restart: unless-stopped

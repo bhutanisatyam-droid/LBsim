@@ -1,0 +1,77 @@
+{
+  "test_case_1_satellite_link": {
+    "description": "40km satellite optical link with 1550nm laser",
+    "inputs": {
+      "tx_power": 34.0,
+      "tx_efficiency": 50.0,
+      "rx_efficiency": 50.0,
+      "rx_sensitivity": -60.0,
+      "wavelength": 1550.0,
+      "tx_diameter": 0.15,
+      "rx_diameter": 0.15,
+      "distance": 40000.0,
+      "impl_loss": 1.5,
+      "coupling_loss": 4.0,
+      "tx_pointing_loss": 1.5,
+      "rx_pointing_loss": 1.5
+    },
+    "expected_link_status": "viable"
+  },
+  
+  "test_case_2_short_range": {
+    "description": "1km terrestrial link with 850nm laser",
+    "inputs": {
+      "tx_power": 20.0,
+      "tx_efficiency": 80.0,
+      "rx_efficiency": 80.0,
+      "rx_sensitivity": -50.0,
+      "wavelength": 850.0,
+      "tx_diameter": 0.05,
+      "rx_diameter": 0.05,
+      "distance": 1000.0,
+      "impl_loss": 0.5,
+      "coupling_loss": 2.0,
+      "tx_pointing_loss": 0.5,
+      "rx_pointing_loss": 0.5
+    },
+    "expected_link_status": "viable"
+  },
+  
+  "test_case_3_long_distance": {
+    "description": "100km GEO satellite link",
+    "inputs": {
+      "tx_power": 40.0,
+      "tx_efficiency": 60.0,
+      "rx_efficiency": 60.0,
+      "rx_sensitivity": -65.0,
+      "wavelength": 1550.0,
+      "tx_diameter": 0.25,
+      "rx_diameter": 0.30,
+      "distance": 100000.0,
+      "impl_loss": 2.0,
+      "coupling_loss": 5.0,
+      "tx_pointing_loss": 2.0,
+      "rx_pointing_loss": 2.0
+    },
+    "expected_link_status": "check_calculation"
+  },
+  
+  "test_case_4_minimal_losses": {
+    "description": "Ideal link with minimal losses",
+    "inputs": {
+      "tx_power": 30.0,
+      "tx_efficiency": 90.0,
+      "rx_efficiency": 90.0,
+      "rx_sensitivity": -70.0,
+      "wavelength": 1550.0,
+      "tx_diameter": 0.20,
+      "rx_diameter": 0.20,
+      "distance": 10000.0,
+      "impl_loss": 0.0,
+      "coupling_loss": 0.0,
+      "tx_pointing_loss": 0.0,
+      "rx_pointing_loss": 0.0
+    },
+    "expected_link_status": "viable"
+  }
+}
