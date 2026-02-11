@@ -168,8 +168,16 @@ function convertLossToDb(value, unit) {
     switch (unit) {
         case 'dB': return value;
         case 'linear': return linearToDb(value);
+        case 'linear': return linearToDb(value);
         default: return value;
     }
+}
+
+// Smart formatting for power values
+function formatPower(mw) {
+    if (mw === 0) return "0.000000";
+    if (Math.abs(mw) < 0.0001) return mw.toExponential(4);
+    return mw.toFixed(6);
 }
 
 // ============================================================================
@@ -361,7 +369,8 @@ function displayResults(outputs) {
     const linkMarginMw = outputs.received_power_mw - outputs.rx_sensitivity_mw;
 
     // Display margin in dB and mW
-    linkMarginValue.textContent = `${linkMargin.toFixed(2)} dB (${linkMarginMw.toFixed(6)} mW)`;
+    // Display margin in dB and mW
+    linkMarginValue.textContent = `${linkMargin.toFixed(2)} dB (${formatPower(linkMarginMw)} mW)`;
 
     // Update power details in Link Margin box
     const rxPowerElement = document.getElementById('linkMarginRxPower');
@@ -369,9 +378,9 @@ function displayResults(outputs) {
 
     if (rxPowerElement && sensitivityElement) {
         rxPowerElement.textContent =
-            `Received: ${outputs.received_power_dbm.toFixed(2)} dBm (${outputs.received_power_mw.toFixed(6)} mW)`;
+            `Received: ${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
         sensitivityElement.textContent =
-            `Required: ${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${outputs.rx_sensitivity_mw.toFixed(9)} mW)`;
+            `Required: ${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
     }
 
     if (linkMargin > 0) {
@@ -387,9 +396,9 @@ function displayResults(outputs) {
 
     // Input Parameters
     document.getElementById('resultTxPower').textContent =
-        `${outputs.tx_power_dbm.toFixed(2)} dBm (${outputs.tx_power_mw.toFixed(6)} mW)`;
+        `${outputs.tx_power_dbm.toFixed(2)} dBm (${formatPower(outputs.tx_power_mw)} mW)`;
     document.getElementById('resultRxSensitivity').textContent =
-        `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${outputs.rx_sensitivity_mw.toFixed(9)} mW)`;
+        `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
     document.getElementById('resultDistance').textContent =
         `${outputs.distance_m.toFixed(2)} m (${outputs.distance_km.toFixed(3)} km)`;
     document.getElementById('resultWavelength').textContent =
@@ -413,7 +422,7 @@ function displayResults(outputs) {
 
     // Final Results
     document.getElementById('resultRxPower').textContent =
-        `${outputs.received_power_dbm.toFixed(2)} dBm (${outputs.received_power_mw.toFixed(6)} mW)`;
+        `${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
     document.getElementById('resultEfficiencies').textContent =
         `Tx: ${outputs.tx_efficiency_percent.toFixed(2)}% | Rx: ${outputs.rx_efficiency_percent.toFixed(2)}%`;
 
@@ -571,29 +580,7 @@ function togglePointingMode(type) {
     }
 }
 
-// ============================================================================
-// UI TOGGLES
-// ============================================================================
 
-function togglePointingMode(type) {
-    const mode = document.querySelector(`input[name="${type}PointingMode"]:checked`).value;
-    const manualInput = document.getElementById(`${type}PointingManualInput`);
-    const errorInput = document.getElementById(`${type}PointingErrorInput`);
-
-    if (mode === 'manual') {
-        manualInput.style.display = 'block';
-        errorInput.style.display = 'none';
-
-        // Clear value in error input to avoid confusion
-        document.getElementById(`${type}PointingError`).value = '';
-    } else {
-        manualInput.style.display = 'none';
-        errorInput.style.display = 'block';
-
-        // Clear value in manual input
-        document.getElementById(`${type}PointingLoss`).value = '';
-    }
-}
 
 // ============================================================================
 // UI HELPERS
