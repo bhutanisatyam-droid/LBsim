@@ -150,7 +150,21 @@ def calculate_pointing_loss(gain_abs: float, error_rad: float) -> float:
     if error_rad is None or error_rad == 0:
         return 0.0
         
-    loss_linear = math.exp(-gain_abs * (error_rad ** 2))
+    # Python's math.exp raises OverflowError for very large inputs, 
+    # but underflows to 0.0 for very small inputs (exponent < -700 approx).
+    # If it underflows to 0.0, math.log10(0.0) raises ValueError: math domain error.
+    exponent = -gain_abs * (error_rad ** 2)
+    
+    # If loss is extremely high (signal effectively zero), return capped max loss
+    if exponent < -700:
+        return 1000.0
+        
+    loss_linear = math.exp(exponent)
+    
+    # Extra safety check for 0.0
+    if loss_linear <= 0:
+         return 1000.0
+
     # Convert to dB (will be negative)
     loss_db = 10 * math.log10(loss_linear)
     # Return absolute value for link budget subtraction
