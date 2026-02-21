@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 import os
 import math
+import tempfile
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -59,17 +60,14 @@ def linear_to_db(linear_value):
     return 10 * math.log10(linear_value)
 
 def calculate_beam_divergence(wavelength_m, diameter_m):
-    """theta = 2.44 * wavelength / diameter"""
     return 2.44 * (wavelength_m / diameter_m)
 
 def calculate_antenna_gain(efficiency, wavelength_m, diameter_m):
-    """G = efficiency * (pi * D / wavelength)^2"""
     gain_abs = efficiency * ((PI * diameter_m / wavelength_m) ** 2)
     gain_db  = linear_to_db(gain_abs)
     return gain_db, gain_abs
 
 def calculate_free_space_path_loss(distance_m, wavelength_m):
-    """FSPL = (4 * pi * distance / wavelength)^2"""
     fspl    = ((4 * PI * distance_m) / wavelength_m) ** 2
     fspl_db = linear_to_db(fspl)
     return fspl_db
@@ -104,53 +102,39 @@ def validate_inputs(params):
     return True, None
 
 def calculate_link_budget(params):
-    """
-    Full link budget calculation with LNA support.
-    Returns:
-      1. Rx power WITHOUT LNA
-      2. Rx power WITH LNA
-      3. Link margin (after LNA)
-    """
-    p_tx_dbm            = params['tx_power_dbm']
-    tx_efficiency       = params['tx_efficiency']
-    rx_efficiency       = params['rx_efficiency']
-    wavelength_m        = params['wavelength_m']
-    tx_diameter_m       = params['tx_diameter_m']
-    rx_diameter_m       = params['rx_diameter_m']
-    distance_m          = params['distance_m']
-    impl_loss_db        = params.get('implementation_loss_db', 0)
-    coupling_loss_db    = params.get('coupling_loss_db', 0)
-    tx_pointing_loss_db = params.get('tx_pointing_loss_db', 0)
-    rx_pointing_loss_db = params.get('rx_pointing_loss_db', 0)
+    p_tx_dbm             = params['tx_power_dbm']
+    tx_efficiency        = params['tx_efficiency']
+    rx_efficiency        = params['rx_efficiency']
+    wavelength_m         = params['wavelength_m']
+    tx_diameter_m        = params['tx_diameter_m']
+    rx_diameter_m        = params['rx_diameter_m']
+    distance_m           = params['distance_m']
+    impl_loss_db         = params.get('implementation_loss_db', 0)
+    coupling_loss_db     = params.get('coupling_loss_db', 0)
+    tx_pointing_loss_db  = params.get('tx_pointing_loss_db', 0)
+    rx_pointing_loss_db  = params.get('rx_pointing_loss_db', 0)
     p_rx_sensitivity_dbm = params.get('rx_sensitivity_dbm', None)
-    rx_lna_gain_db      = params.get('rx_lna_gain_db', 0)
+    rx_lna_gain_db       = params.get('rx_lna_gain_db', 0)
 
-    # Beam divergence
     tx_theta = calculate_beam_divergence(wavelength_m, tx_diameter_m)
     rx_theta = calculate_beam_divergence(wavelength_m, rx_diameter_m)
 
-    # Antenna gains
     g_tx_db, g_tx_abs = calculate_antenna_gain(tx_efficiency, wavelength_m, tx_diameter_m)
     g_rx_db, g_rx_abs = calculate_antenna_gain(rx_efficiency, wavelength_m, rx_diameter_m)
 
-    # Free space path loss
     path_loss_db = calculate_free_space_path_loss(distance_m, wavelength_m)
 
-    # Total losses
     total_loss_db = (path_loss_db + impl_loss_db + coupling_loss_db +
                      tx_pointing_loss_db + rx_pointing_loss_db)
 
-    # 1. Rx power WITHOUT LNA
     rcvd_power_dbm = p_tx_dbm + g_tx_db + g_rx_db - total_loss_db
     rcvd_power_mw  = dbm_to_mw(rcvd_power_dbm)
     rcvd_power_w   = dbm_to_w(rcvd_power_dbm)
 
-    # 2. Rx power WITH LNA
     rcvd_power_lna_dbm = rcvd_power_dbm + rx_lna_gain_db
     rcvd_power_lna_mw  = dbm_to_mw(rcvd_power_lna_dbm)
     rcvd_power_lna_w   = dbm_to_w(rcvd_power_lna_dbm)
 
-    # 3. Link margin (after LNA)
     link_margin_db = None
     if p_rx_sensitivity_dbm is not None:
         link_margin_db = rcvd_power_lna_dbm - p_rx_sensitivity_dbm
@@ -208,7 +192,6 @@ def calculate_link_budget(params):
     }
 
 def flatten_results(raw: dict) -> dict:
-    """Flatten nested results dict into flat dict for frontend."""
     inp  = raw.get('inputs', {})
     ag   = raw.get('antenna_gains', {})
     bd   = raw.get('beam_divergence', {})
@@ -259,26 +242,26 @@ def flatten_results(raw: dict) -> dict:
 # ============= DATA MODELS =============
 
 class LinkBudgetInput(BaseModel):
-    tx_power_dbm:           float            = Field(..., description="Transmitter power in dBm")
-    tx_efficiency:          float            = Field(..., ge=0, le=1)
-    tx_diameter_m:          float            = Field(..., gt=0)
-    rx_efficiency:          float            = Field(..., ge=0, le=1)
-    rx_diameter_m:          float            = Field(..., gt=0)
-    rx_sensitivity_dbm:     Optional[float]  = Field(None)
-    rx_lna_gain_db:         Optional[float]  = Field(0.0, ge=0)
-    wavelength_m:           float            = Field(..., gt=0)
-    distance_m:             float            = Field(..., gt=0)
-    implementation_loss_db: Optional[float]  = Field(0, ge=0)
-    coupling_loss_db:       Optional[float]  = Field(0, ge=0)
-    tx_pointing_loss_db:    Optional[float]  = Field(0, ge=0)
-    rx_pointing_loss_db:    Optional[float]  = Field(0, ge=0)
+    tx_power_dbm:           float           = Field(..., description="Transmitter power in dBm")
+    tx_efficiency:          float           = Field(..., ge=0, le=1)
+    tx_diameter_m:          float           = Field(..., gt=0)
+    rx_efficiency:          float           = Field(..., ge=0, le=1)
+    rx_diameter_m:          float           = Field(..., gt=0)
+    rx_sensitivity_dbm:     Optional[float] = Field(None)
+    rx_lna_gain_db:         Optional[float] = Field(0.0, ge=0)
+    wavelength_m:           float           = Field(..., gt=0)
+    distance_m:             float           = Field(..., gt=0)
+    implementation_loss_db: Optional[float] = Field(0, ge=0)
+    coupling_loss_db:       Optional[float] = Field(0, ge=0)
+    tx_pointing_loss_db:    Optional[float] = Field(0, ge=0)
+    rx_pointing_loss_db:    Optional[float] = Field(0, ge=0)
 
 
 class SaveCalculationRequest(BaseModel):
-    calculation_name: str            = Field(..., min_length=1, max_length=100)
+    calculation_name: str           = Field(..., min_length=1, max_length=100)
     inputs:           LinkBudgetInput
     results:          Dict[str, Any]
-    notes:            Optional[str]  = Field(None, max_length=500)
+    notes:            Optional[str] = Field(None, max_length=500)
 
 
 # ============= API ENDPOINTS =============
@@ -407,8 +390,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-import tempfile
+from reportlab.lib.enums import TA_CENTER
 
 
 class WatermarkCanvas(canvas.Canvas):
@@ -459,12 +441,14 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
     normal_style = styles['Normal']
     inputs = calculation_data.get('inputs', {})
     outputs = calculation_data.get('outputs', {})
+
     story.append(Paragraph("Optical Link Budget Calculation Report", title_style))
     story.append(Spacer(1, 0.3*inch))
     story.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%B %d, %Y at %H:%M:%S')}", normal_style))
     story.append(Spacer(1, 0.5*inch))
     story.append(Paragraph("Input Parameters", heading_style))
     story.append(Spacer(1, 0.1*inch))
+
     lna_gain = inputs.get('rx_lna_gain_db', outputs.get('rx_lna_gain_db', 0)) or 0
     input_data = [
         ['Parameter', 'Value', 'Unit'],
@@ -557,19 +541,29 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
     story.append(PageBreak())
     story.append(Paragraph("Power Budget Summary", heading_style))
     story.append(Spacer(1, 0.3*inch))
+
     link_margin = outputs.get('link_margin_db', 0) or 0
     lna_gain_val = outputs.get('rx_lna_gain_db', 0) or 0
     if link_margin > 0:
-        status = "✓ LINK VIABLE"; status_color = colors.HexColor('#28a745'); margin_bg = colors.HexColor('#d4edda')
+        status = "LINK VIABLE"
+        status_color = colors.HexColor('#28a745')
+        margin_bg = colors.HexColor('#d4edda')
     else:
-        status = "✗ LINK NOT VIABLE"; status_color = colors.HexColor('#dc3545'); margin_bg = colors.HexColor('#f8d7da')
+        status = "LINK NOT VIABLE"
+        status_color = colors.HexColor('#dc3545')
+        margin_bg = colors.HexColor('#f8d7da')
+
     margin_display = [['LINK MARGIN (After LNA)', f"{link_margin:.2f} dB"], ['STATUS', status]]
     margin_table = Table(margin_display, colWidths=[3*inch, 3.5*inch])
     margin_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), margin_bg), ('TEXTCOLOR', (0,0), (-1,-1), status_color),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 24), ('GRID', (0,0), (-1,-1), 3, status_color),
-        ('TOPPADDING', (0,0), (-1,-1), 20), ('BOTTOMPADDING', (0,0), (-1,-1), 20),
+        ('BACKGROUND', (0,0), (-1,-1), margin_bg),
+        ('TEXTCOLOR', (0,0), (-1,-1), status_color),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 24),
+        ('GRID', (0,0), (-1,-1), 3, status_color),
+        ('TOPPADDING', (0,0), (-1,-1), 20),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 20),
     ]))
     story.append(margin_table)
     story.append(Spacer(1, 0.5*inch))
@@ -613,15 +607,15 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
     story.append(efficiency_table)
     story.append(Spacer(1, 0.5*inch))
     story.append(Paragraph("Notes", subheading_style))
-    notes_text = """
-    • Rx Power (Without LNA Amplification) is the raw power at the receiver aperture.<br/>
-    • Rx Power (With LNA Amplification) adds the Optical LNA gain to the raw Rx power.<br/>
-    • Link Margin is computed using Rx Power WITH LNA Amplification minus Receiver Sensitivity.<br/>
-    • Positive link margin means the link is viable.<br/>
-    • A link margin of 3-6 dB is typically recommended for reliable operation.<br/>
-    • This calculation assumes ideal atmospheric conditions.<br/>
-    • Actual performance may vary based on environmental factors.
-    """
+    notes_text = (
+        "Rx Power (Without LNA Amplification) is the raw power at the receiver aperture. "
+        "Rx Power (With LNA Amplification) adds the Optical LNA gain to the raw Rx power. "
+        "Link Margin is computed using Rx Power WITH LNA Amplification minus Receiver Sensitivity. "
+        "Positive link margin means the link is viable. "
+        "A link margin of 3-6 dB is typically recommended for reliable operation. "
+        "This calculation assumes ideal atmospheric conditions. "
+        "Actual performance may vary based on environmental factors."
+    )
     story.append(Paragraph(notes_text, normal_style))
     doc.build(story, canvasmaker=WatermarkCanvas)
     return output_path
@@ -640,11 +634,6 @@ async def generate_pdf(calculation_data: dict):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
-```
-
-Also make sure `reportlab` is in your `requirements.txt`. It should have:
-```
-reportlab
 
 
 # ============= RUN SERVER =============
