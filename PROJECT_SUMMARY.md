@@ -413,7 +413,7 @@ vercel
 ---
 
 **Congratulations! You now have a complete, professional Optical Link Budget Calculator! 🚀**
-
+Add Rx Optical LNA feature
 **Questions? Check:**
 1. README.md - Full documentation
 2. QUICKSTART.md - Quick start
