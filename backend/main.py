@@ -123,10 +123,10 @@ def linear_to_db(linear: float) -> float:
 # CORE CALCULATIONS (MATCHING MATLAB)
 # ============================================================================
 
-def calculate_tx_antenna_gain(theta: float) -> tuple:
-    """Calculate Transmitter antenna gain (absolute and dB) using beam divergence
-    MATLAB: tx_absGain = 32 / theta^2"""
-    gain_absolute = 32 / (theta ** 2)
+def calculate_tx_antenna_gain(diameter: float, wavelength_m: float) -> tuple:
+    """Calculate Transmitter antenna gain (absolute and dB) using aperture diameter
+    Formula: tx_absGain = (pi * tx_D / op_wv)^2"""
+    gain_absolute = (PI * diameter / wavelength_m) ** 2
     gain_db = 10 * math.log10(gain_absolute)
     return gain_absolute, gain_db
 
@@ -179,12 +179,14 @@ def calculate_link_budget(inputs: CalculationInput) -> Dict[str, float]:
     """Main link budget calculation function"""
     wavelength_m = inputs.wavelength * 1e-9
     
-    # Calculate Beam Divergence FIRST as it's needed for Tx Gain
+    # Calculate Beam Divergence (still returned in results)
     tx_beam_divergence = calculate_beam_divergence(wavelength_m, inputs.tx_diameter)
     rx_beam_divergence = calculate_beam_divergence(wavelength_m, inputs.rx_diameter)
 
-    # Tx Gain uses Theta (Beam Divergence) - MATLAB formula
-    tx_gain_abs, tx_gain_db = calculate_tx_antenna_gain(tx_beam_divergence)
+    # Tx Gain uses Diameter - now matches Rx formula
+    tx_gain_abs, tx_gain_db = calculate_tx_antenna_gain(
+        inputs.tx_diameter, wavelength_m
+    )
     
     # Rx Gain uses Diameter - MATLAB formula
     rx_gain_abs, rx_gain_db = calculate_rx_antenna_gain(
