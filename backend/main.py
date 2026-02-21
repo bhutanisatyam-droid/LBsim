@@ -6,6 +6,7 @@ All calculations included inline - no external module dependencies
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import uvicorn
@@ -131,10 +132,12 @@ def calculate_link_budget(params):
     rcvd_power_mw  = dbm_to_mw(rcvd_power_dbm)
     rcvd_power_w   = dbm_to_w(rcvd_power_dbm)
 
+    # LNA adds directly to Rx power
     rcvd_power_lna_dbm = rcvd_power_dbm + rx_lna_gain_db
     rcvd_power_lna_mw  = dbm_to_mw(rcvd_power_lna_dbm)
     rcvd_power_lna_w   = dbm_to_w(rcvd_power_lna_dbm)
 
+    # Link margin calculated AFTER LNA
     link_margin_db = None
     if p_rx_sensitivity_dbm is not None:
         link_margin_db = rcvd_power_lna_dbm - p_rx_sensitivity_dbm
@@ -265,14 +268,6 @@ class SaveCalculationRequest(BaseModel):
 
 
 # ============= API ENDPOINTS =============
-
-@app.get("/")
-async def root():
-    return {
-        "message": "Optical Link Budget Calculator API",
-        "version": "2.0.0"
-    }
-
 
 @app.get("/health")
 async def health_check():
@@ -456,7 +451,7 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
         ['Transmitter Efficiency', f"{inputs.get('tx_efficiency', 0) * 100 if inputs.get('tx_efficiency', 0) <= 1 else inputs.get('tx_efficiency', 0):.2f}", '%'],
         ['Receiver Efficiency', f"{inputs.get('rx_efficiency', 0) * 100 if inputs.get('rx_efficiency', 0) <= 1 else inputs.get('rx_efficiency', 0):.2f}", '%'],
         ['Receiver Sensitivity', f"{inputs.get('rx_sensitivity_dbm', outputs.get('rx_sensitivity_dbm', 0)):.2f} dBm  ({outputs.get('rx_sensitivity_mw', 0):.9f} mW)", ''],
-        ['Rx Optical LNA Gain', f"{lna_gain:.2f}", 'dB'],
+        ['Receiver Optical Low Noise Amplifier Gain Value', f"{lna_gain:.2f}", 'dB'],
         ['Optical Wavelength', f"{inputs.get('wavelength_m', 0) * 1e9:.2f}", 'nm'],
         ['Transmitter Diameter', f"{inputs.get('tx_diameter_m', 0):.3f}", 'm'],
         ['Receiver Diameter', f"{inputs.get('rx_diameter_m', 0):.3f}", 'm'],
@@ -553,7 +548,7 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
         status_color = colors.HexColor('#dc3545')
         margin_bg = colors.HexColor('#f8d7da')
 
-    margin_display = [['LINK MARGIN (After LNA)', f"{link_margin:.2f} dB"], ['STATUS', status]]
+    margin_display = [['LINK MARGIN (After LNA Amplification)', f"{link_margin:.2f} dB"], ['STATUS', status]]
     margin_table = Table(margin_display, colWidths=[3*inch, 3.5*inch])
     margin_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), margin_bg),
@@ -609,7 +604,7 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
     story.append(Paragraph("Notes", subheading_style))
     notes_text = (
         "Rx Power (Without LNA Amplification) is the raw power at the receiver aperture. "
-        "Rx Power (With LNA Amplification) adds the Optical LNA gain to the raw Rx power. "
+        "Rx Power (With LNA Amplification) adds the Optical LNA gain directly to the raw Rx power. "
         "Link Margin is computed using Rx Power WITH LNA Amplification minus Receiver Sensitivity. "
         "Positive link margin means the link is viable. "
         "A link margin of 3-6 dB is typically recommended for reliable operation. "
@@ -634,6 +629,14 @@ async def generate_pdf(calculation_data: dict):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
+
+
+# ============= SERVE FRONTEND =============
+
+# Mount frontend AFTER all API routes so API routes take priority
+frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="static")
 
 
 # ============= RUN SERVER =============
