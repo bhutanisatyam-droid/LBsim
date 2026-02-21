@@ -1,6 +1,13 @@
 /**
  * Optical Link Budget Calculator - Frontend Logic
  * Handles API integration, calculations, save/load, PDF export
+ *
+ * v2 changes:
+ *   - Collects rx_lna_gain_db from new input field
+ *   - displayResults() shows:
+ *       1. Rx Power (Without LNA Amplification)
+ *       2. Rx Power (With LNA Amplification)
+ *       3. Link Margin (Calculated after LNA Amplification)
  */
 
 // Configuration
@@ -17,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setupServiceWorker();
 
     // Check API connection periodically
-    setInterval(checkAPIConnection, 30000);  // Every 30 seconds
+    setInterval(checkAPIConnection, 30000);
 });
 
 // ============================================================================
@@ -26,11 +33,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
 async function checkAPIConnection() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/health`, {
+        const response = await fetch(`${API_BASE_URL}/health`, {
             method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
         const statusDiv = document.getElementById('apiStatus');
@@ -43,7 +48,7 @@ async function checkAPIConnection() {
     } catch (error) {
         const statusDiv = document.getElementById('apiStatus');
         statusDiv.className = 'api-status offline';
-        statusDiv.textContent = '⚠️ Backend API: Offline (Using local calculations)';
+        statusDiv.textContent = '⚠️ Backend API: Offline';
         console.warn('API connection failed:', error);
     }
 }
@@ -76,19 +81,16 @@ function setupInputValidation() {
         });
         input.addEventListener('focus', function () {
             const errorDiv = document.getElementById(input.id + '-error');
-            if (errorDiv) {
-                errorDiv.classList.remove('show');
-            }
+            if (errorDiv) errorDiv.classList.remove('show');
         });
     });
 }
 
 function validateNumericInput(event) {
-    const input = event.target;
-    const value = input.value;
-    const inputId = input.id;
+    const input    = event.target;
+    const value    = input.value;
+    const inputId  = input.id;
     const errorDiv = document.getElementById(inputId + '-error');
-
     const validPattern = /^-?\d*\.?\d*([eE][-+]?\d*)?$/;
 
     if (!validPattern.test(value) && value !== '') {
@@ -97,44 +99,29 @@ function validateNumericInput(event) {
             errorDiv.classList.add('show');
         }
         input.value = value.replace(/[^0-9.\-eE]/g, '');
-        if (!validPattern.test(input.value)) {
-            input.value = '';
-        }
+        if (!validPattern.test(input.value)) input.value = '';
     } else {
-        if (errorDiv) {
-            errorDiv.classList.remove('show');
-        }
+        if (errorDiv) errorDiv.classList.remove('show');
         hideError();
     }
 }
 
 // ============================================================================
-// CONVERSION FUNCTIONS (CLIENT-SIDE FALLBACK)
+// CONVERSION FUNCTIONS
 // ============================================================================
 
-function mWtoDBm(mW) {
-    return 10 * Math.log10(mW);
-}
-
-function dBmToMW(dBm) {
-    return Math.pow(10, dBm / 10);
-}
-
-function WtoDBm(W) {
-    return 10 * Math.log10(W * 1000);
-}
-
-function linearToDb(linear) {
-    return 10 * Math.log10(linear);
-}
+function mWtoDBm(mW)      { return 10 * Math.log10(mW); }
+function dBmToMW(dBm)     { return Math.pow(10, dBm / 10); }
+function WtoDBm(W)        { return 10 * Math.log10(W * 1000); }
+function linearToDb(l)    { return 10 * Math.log10(l); }
 
 function convertToMeters(value, unit) {
     switch (unit) {
-        case 'm': return value;
+        case 'm':  return value;
         case 'cm': return value / 100;
         case 'mm': return value / 1000;
         case 'km': return value * 1000;
-        default: return value;
+        default:   return value;
     }
 }
 
@@ -142,34 +129,42 @@ function convertToNanometers(value, unit) {
     switch (unit) {
         case 'nm': return value;
         case 'μm': return value * 1000;
-        case 'm': return value * 1e9;
-        default: return value;
+        case 'm':  return value * 1e9;
+        default:   return value;
     }
 }
 
 function convertPowerToDBm(value, unit) {
     switch (unit) {
         case 'dBm': return value;
-        case 'mW': return mWtoDBm(value);
-        case 'W': return WtoDBm(value);
-        default: return value;
+        case 'mW':  return mWtoDBm(value);
+        case 'W':   return WtoDBm(value);
+        default:    return value;
     }
 }
 
 function convertToPercent(value, unit) {
     switch (unit) {
-        case '%': return value;
+        case '%':       return value;
         case 'decimal': return value * 100;
-        default: return value;
+        default:        return value;
     }
 }
 
 function convertLossToDb(value, unit) {
     switch (unit) {
-        case 'dB': return value;
+        case 'dB':     return value;
         case 'linear': return linearToDb(value);
-        case 'linear': return linearToDb(value);
-        default: return value;
+        default:       return value;
+    }
+}
+
+function convertAngleToRadians(value, unit) {
+    switch (unit) {
+        case 'rad':  return value;
+        case 'urad': return value * 1e-6;
+        case 'nrad': return value * 1e-9;
+        default:     return value;
     }
 }
 
@@ -188,154 +183,143 @@ async function calculateLinkBudget() {
     hideError();
     hideSuccess();
 
-    const calculateBtn = document.getElementById('calculateBtn');
-    const originalText = calculateBtn.textContent;
+    const calculateBtn   = document.getElementById('calculateBtn');
+    const originalText   = calculateBtn.textContent;
     calculateBtn.innerHTML = '<span class="loading"></span> Calculating...';
-    calculateBtn.disabled = true;
+    calculateBtn.disabled  = true;
 
     try {
-        // Collect all input values
         const inputs = collectInputs();
 
-        // Validate required inputs
-        if (!validateRequiredInputs(inputs)) {
-            return;
+        if (!validateRequiredInputs(inputs)) return;
+
+        const response = await fetch(`${API_BASE_URL}/api/calculate`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(inputs)
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || 'API calculation failed');
         }
 
-        // Try API first, fallback to client-side calculation
-        try {
-            const response = await fetch(`${API_BASE_URL}/api/calculate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(inputs)
-            });
+        const data = await response.json();
+        currentCalculationData = data;
+        displayResults(data.outputs);
 
-            if (!response.ok) {
-                throw new Error('API calculation failed');
-            }
-
-            const data = await response.json();
-            currentCalculationData = data;
-            displayResults(data.outputs);
-
-            // Enable save and PDF buttons
-            document.getElementById('saveBtn').disabled = false;
-            document.getElementById('pdfBtn').disabled = false;
-
-        } catch (apiError) {
-            console.warn('API calculation failed, using client-side fallback');
-            showWarning('Using offline calculation mode');
-            // Implement client-side calculation here if needed
-            throw new Error('Calculation requires backend API');
-        }
+        document.getElementById('saveBtn').disabled = false;
+        document.getElementById('pdfBtn').disabled  = false;
 
     } catch (error) {
         showError('Calculation error: ' + error.message);
     } finally {
         calculateBtn.textContent = originalText;
-        calculateBtn.disabled = false;
+        calculateBtn.disabled    = false;
     }
 }
 
+// ============================================================================
+// COLLECT INPUTS
+// ============================================================================
+
 function collectInputs() {
-    // Get all input values and convert to standard units
-    const txPowerValue = parseFloat(document.getElementById('txPower').value);
-    const txPowerUnit = document.getElementById('txPowerUnit').value;
+    const txPowerValue       = parseFloat(document.getElementById('txPower').value);
+    const txPowerUnit        = document.getElementById('txPowerUnit').value;
 
-    const txEfficiencyValue = parseFloat(document.getElementById('txEfficiency').value);
-    const txEfficiencyUnit = document.getElementById('txEfficiencyUnit').value;
+    const txEfficiencyValue  = parseFloat(document.getElementById('txEfficiency').value);
+    const txEfficiencyUnit   = document.getElementById('txEfficiencyUnit').value;
 
-    const rxEfficiencyValue = parseFloat(document.getElementById('rxEfficiency').value);
-    const rxEfficiencyUnit = document.getElementById('rxEfficiencyUnit').value;
+    const rxEfficiencyValue  = parseFloat(document.getElementById('rxEfficiency').value);
+    const rxEfficiencyUnit   = document.getElementById('rxEfficiencyUnit').value;
 
     const rxSensitivityValue = parseFloat(document.getElementById('rxSensitivity').value);
-    const rxSensitivityUnit = document.getElementById('rxSensitivityUnit').value;
+    const rxSensitivityUnit  = document.getElementById('rxSensitivityUnit').value;
 
-    const wavelengthValue = parseFloat(document.getElementById('wavelength').value);
-    const wavelengthUnit = document.getElementById('wavelengthUnit').value;
+    // NEW: Rx Optical LNA gain
+    const rxLnaGainValue     = parseFloat(document.getElementById('rxLnaGain').value) || 0;
 
-    const txDiameterValue = parseFloat(document.getElementById('txDiameter').value);
-    const txDiameterUnit = document.getElementById('txDiameterUnit').value;
+    const wavelengthValue    = parseFloat(document.getElementById('wavelength').value);
+    const wavelengthUnit     = document.getElementById('wavelengthUnit').value;
 
-    const rxDiameterValue = parseFloat(document.getElementById('rxDiameter').value);
-    const rxDiameterUnit = document.getElementById('rxDiameterUnit').value;
+    const txDiameterValue    = parseFloat(document.getElementById('txDiameter').value);
+    const txDiameterUnit     = document.getElementById('txDiameterUnit').value;
 
-    const distanceValue = parseFloat(document.getElementById('distance').value);
-    const distanceUnit = document.getElementById('distanceUnit').value;
+    const rxDiameterValue    = parseFloat(document.getElementById('rxDiameter').value);
+    const rxDiameterUnit     = document.getElementById('rxDiameterUnit').value;
 
-    // Optional losses
-    const implLossValue = parseFloat(document.getElementById('implLoss').value) || 0;
-    const implLossUnit = document.getElementById('implLossUnit').value;
+    const distanceValue      = parseFloat(document.getElementById('distance').value);
+    const distanceUnit       = document.getElementById('distanceUnit').value;
 
-    const couplingLossValue = parseFloat(document.getElementById('couplingLoss').value) || 0;
-    const couplingLossUnit = document.getElementById('couplingLossUnit').value;
+    const implLossValue      = parseFloat(document.getElementById('implLoss').value) || 0;
+    const implLossUnit       = document.getElementById('implLossUnit').value;
 
-    // Convert to standard units for API
+    const couplingLossValue  = parseFloat(document.getElementById('couplingLoss').value) || 0;
+    const couplingLossUnit   = document.getElementById('couplingLossUnit').value;
+
+    // Convert efficiency from % to decimal (0-1) for the API
+    const txEfficiencyPct = convertToPercent(txEfficiencyValue, txEfficiencyUnit);
+    const rxEfficiencyPct = convertToPercent(rxEfficiencyValue, rxEfficiencyUnit);
+
     const inputs = {
-        tx_power: convertPowerToDBm(txPowerValue, txPowerUnit),
-        tx_efficiency: convertToPercent(txEfficiencyValue, txEfficiencyUnit),
-        rx_efficiency: convertToPercent(rxEfficiencyValue, rxEfficiencyUnit),
-        rx_sensitivity: convertPowerToDBm(rxSensitivityValue, rxSensitivityUnit),
-        wavelength: convertToNanometers(wavelengthValue, wavelengthUnit),
-        tx_diameter: convertToMeters(txDiameterValue, txDiameterUnit),
-        rx_diameter: convertToMeters(rxDiameterValue, rxDiameterUnit),
-        distance: convertToMeters(distanceValue, distanceUnit),
-        impl_loss: convertLossToDb(implLossValue, implLossUnit),
-        coupling_loss: convertLossToDb(couplingLossValue, couplingLossUnit)
+        tx_power_dbm:           convertPowerToDBm(txPowerValue, txPowerUnit),
+        tx_efficiency:          txEfficiencyPct / 100,   // API expects 0-1
+        rx_efficiency:          rxEfficiencyPct / 100,
+        rx_sensitivity_dbm:     convertPowerToDBm(rxSensitivityValue, rxSensitivityUnit),
+        rx_lna_gain_db:         rxLnaGainValue,          // NEW field
+        wavelength_m:           convertToNanometers(wavelengthValue, wavelengthUnit) * 1e-9,
+        tx_diameter_m:          convertToMeters(txDiameterValue, txDiameterUnit),
+        rx_diameter_m:          convertToMeters(rxDiameterValue, rxDiameterUnit),
+        distance_m:             convertToMeters(distanceValue, distanceUnit),
+        implementation_loss_db: convertLossToDb(implLossValue, implLossUnit),
+        coupling_loss_db:       convertLossToDb(couplingLossValue, couplingLossUnit)
     };
 
     // Handle Tx Pointing Mode
     const txPointingMode = document.querySelector('input[name="txPointingMode"]:checked').value;
     if (txPointingMode === 'manual') {
-        const txPointingLossValue = parseFloat(document.getElementById('txPointingLoss').value) || 0;
-        const txPointingLossUnit = document.getElementById('txPointingLossUnit').value;
-        inputs.tx_pointing_loss = convertLossToDb(txPointingLossValue, txPointingLossUnit);
-        inputs.tx_pointing_error_rad = null;
+        const txPLv = parseFloat(document.getElementById('txPointingLoss').value) || 0;
+        const txPLu = document.getElementById('txPointingLossUnit').value;
+        inputs.tx_pointing_loss_db    = convertLossToDb(txPLv, txPLu);
+        inputs.tx_pointing_error_rad  = null;
     } else {
-        const txPointingErrorValue = parseFloat(document.getElementById('txPointingError').value) || 0;
-        const txPointingErrorUnit = document.getElementById('txPointingErrorUnit').value;
-        inputs.tx_pointing_error_rad = convertAngleToRadians(txPointingErrorValue, txPointingErrorUnit);
-        inputs.tx_pointing_loss = 0; // Will be calculated by backend
+        const txPEv = parseFloat(document.getElementById('txPointingError').value) || 0;
+        const txPEu = document.getElementById('txPointingErrorUnit').value;
+        inputs.tx_pointing_error_rad  = convertAngleToRadians(txPEv, txPEu);
+        inputs.tx_pointing_loss_db    = 0;
     }
 
     // Handle Rx Pointing Mode
     const rxPointingMode = document.querySelector('input[name="rxPointingMode"]:checked').value;
     if (rxPointingMode === 'manual') {
-        const rxPointingLossValue = parseFloat(document.getElementById('rxPointingLoss').value) || 0;
-        const rxPointingLossUnit = document.getElementById('rxPointingLossUnit').value;
-        inputs.rx_pointing_loss = convertLossToDb(rxPointingLossValue, rxPointingLossUnit);
-        inputs.rx_pointing_error_rad = null;
+        const rxPLv = parseFloat(document.getElementById('rxPointingLoss').value) || 0;
+        const rxPLu = document.getElementById('rxPointingLossUnit').value;
+        inputs.rx_pointing_loss_db    = convertLossToDb(rxPLv, rxPLu);
+        inputs.rx_pointing_error_rad  = null;
     } else {
-        const rxPointingErrorValue = parseFloat(document.getElementById('rxPointingError').value) || 0;
-        const rxPointingErrorUnit = document.getElementById('rxPointingErrorUnit').value;
-        inputs.rx_pointing_error_rad = convertAngleToRadians(rxPointingErrorValue, rxPointingErrorUnit);
-        inputs.rx_pointing_loss = 0; // Will be calculated by backend
+        const rxPEv = parseFloat(document.getElementById('rxPointingError').value) || 0;
+        const rxPEu = document.getElementById('rxPointingErrorUnit').value;
+        inputs.rx_pointing_error_rad  = convertAngleToRadians(rxPEv, rxPEu);
+        inputs.rx_pointing_loss_db    = 0;
     }
 
     return inputs;
 }
 
-function convertAngleToRadians(value, unit) {
-    switch (unit) {
-        case 'rad': return value;
-        case 'urad': return value * 1e-6;
-        case 'nrad': return value * 1e-9;
-        default: return value;
-    }
-}
+// ============================================================================
+// VALIDATION
+// ============================================================================
 
 function validateRequiredInputs(inputs) {
     const requiredFields = [
-        { name: 'tx_power', label: 'Transmitter Power' },
-        { name: 'tx_efficiency', label: 'Transmitter Efficiency' },
-        { name: 'rx_efficiency', label: 'Receiver Efficiency' },
-        { name: 'rx_sensitivity', label: 'Receiver Sensitivity' },
-        { name: 'wavelength', label: 'Wavelength' },
-        { name: 'tx_diameter', label: 'Transmitter Diameter' },
-        { name: 'rx_diameter', label: 'Receiver Diameter' },
-        { name: 'distance', label: 'Distance' }
+        { name: 'tx_power_dbm',      label: 'Transmitter Power' },
+        { name: 'tx_efficiency',      label: 'Transmitter Efficiency' },
+        { name: 'rx_efficiency',      label: 'Receiver Efficiency' },
+        { name: 'rx_sensitivity_dbm', label: 'Receiver Sensitivity' },
+        { name: 'wavelength_m',       label: 'Wavelength' },
+        { name: 'tx_diameter_m',      label: 'Transmitter Diameter' },
+        { name: 'rx_diameter_m',      label: 'Receiver Diameter' },
+        { name: 'distance_m',         label: 'Distance' }
     ];
 
     for (const field of requiredFields) {
@@ -345,9 +329,14 @@ function validateRequiredInputs(inputs) {
         }
     }
 
-    // Check for positive values where needed
-    if (inputs.wavelength <= 0 || inputs.tx_diameter <= 0 || inputs.rx_diameter <= 0 || inputs.distance <= 0) {
+    if (inputs.wavelength_m <= 0 || inputs.tx_diameter_m <= 0 ||
+        inputs.rx_diameter_m <= 0 || inputs.distance_m <= 0) {
         showError('Wavelength, diameters, and distance must be positive values');
+        return false;
+    }
+
+    if (inputs.rx_lna_gain_db < 0) {
+        showError('Rx LNA Gain must be 0 or a positive value (enter 0 if no LNA)');
         return false;
     }
 
@@ -359,74 +348,102 @@ function validateRequiredInputs(inputs) {
 // ============================================================================
 
 function displayResults(outputs) {
-    // Link Margin (PROMINENT DISPLAY)
+    const lnaGain    = outputs.rx_lna_gain_db || 0;
     const linkMargin = outputs.link_margin_db;
-    const linkMarginBox = document.getElementById('linkMarginBox');
+
+    // ── Big Link Margin box ──────────────────────────────────────────────
+    const linkMarginBox   = document.getElementById('linkMarginBox');
     const linkMarginValue = document.getElementById('linkMarginValue');
-    const linkStatus = document.getElementById('linkStatus');
+    const linkStatus      = document.getElementById('linkStatus');
 
-    // Calculate link margin in mW (difference between received and required power)
-    const linkMarginMw = outputs.received_power_mw - outputs.rx_sensitivity_mw;
+    linkMarginValue.textContent = `${linkMargin !== null ? linkMargin.toFixed(2) : 'N/A'} dB`;
 
-    // Display margin in dB and mW
-    // Display margin in dB and mW
-    linkMarginValue.textContent = `${linkMargin.toFixed(2)} dB (${formatPower(linkMarginMw)} mW)`;
-
-    // Update power details in Link Margin box
-    const rxPowerElement = document.getElementById('linkMarginRxPower');
-    const sensitivityElement = document.getElementById('linkMarginSensitivity');
-
-    if (rxPowerElement && sensitivityElement) {
-        rxPowerElement.textContent =
-            `Received: ${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
-        sensitivityElement.textContent =
-            `Required: ${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
-    }
-
-    if (linkMargin > 0) {
+    if (linkMargin !== null && linkMargin > 0) {
         linkMarginBox.classList.remove('negative');
-        linkStatus.textContent = '✓ LINK VIABLE';
-        if (linkMargin >= 3 && linkMargin <= 6) {
-            linkStatus.textContent = '✓ LINK EXCELLENT (Recommended Margin)';
-        }
+        linkStatus.textContent = linkMargin >= 6
+            ? '✓ LINK EXCELLENT'
+            : linkMargin >= 3
+                ? '✓ LINK GOOD'
+                : '✓ LINK VIABLE (Marginal)';
     } else {
         linkMarginBox.classList.add('negative');
         linkStatus.textContent = '✗ LINK NOT VIABLE';
     }
 
-    // Input Parameters
+    // Three power rows inside the margin box
+    document.getElementById('lmRxPowerNoLna').textContent =
+        `${outputs.received_power_dbm.toFixed(2)} dBm  (${formatPower(outputs.received_power_mw)} mW)`;
+
+    document.getElementById('lmRxPowerLna').textContent =
+        `${outputs.received_power_lna_dbm.toFixed(2)} dBm  (${formatPower(outputs.received_power_lna_mw)} mW)`
+        + (lnaGain > 0 ? `  [+${lnaGain.toFixed(1)} dB LNA]` : '  [No LNA]');
+
+    document.getElementById('lmSensitivity').textContent =
+        outputs.rx_sensitivity_dbm !== null
+            ? `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm  (${formatPower(outputs.rx_sensitivity_mw)} mW)`
+            : '—';
+
+    // ── Input Summary ────────────────────────────────────────────────────
     document.getElementById('resultTxPower').textContent =
-        `${outputs.tx_power_dbm.toFixed(2)} dBm (${formatPower(outputs.tx_power_mw)} mW)`;
+        `${outputs.tx_power_dbm.toFixed(2)} dBm  (${formatPower(outputs.tx_power_mw)} mW)`;
+
     document.getElementById('resultRxSensitivity').textContent =
-        `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
+        outputs.rx_sensitivity_dbm !== null
+            ? `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm  (${formatPower(outputs.rx_sensitivity_mw)} mW)`
+            : '—';
+
     document.getElementById('resultDistance').textContent =
-        `${outputs.distance_m.toFixed(2)} m (${outputs.distance_km.toFixed(3)} km)`;
+        `${outputs.distance_m.toFixed(2)} m  (${outputs.distance_km.toFixed(3)} km)`;
+
     document.getElementById('resultWavelength').textContent =
         `${outputs.wavelength_nm.toFixed(2)} nm`;
 
-    // Antenna Gains
+    // ── Antenna Gains ────────────────────────────────────────────────────
     document.getElementById('resultTxGain').textContent =
-        `${outputs.tx_gain_db.toFixed(2)} dB (${outputs.tx_gain_absolute.toFixed(2)})`;
+        `${outputs.tx_gain_db.toFixed(2)} dB  (${outputs.tx_gain_absolute.toFixed(2)})`;
     document.getElementById('resultRxGain').textContent =
-        `${outputs.rx_gain_db.toFixed(2)} dB (${outputs.rx_gain_absolute.toFixed(2)})`;
+        `${outputs.rx_gain_db.toFixed(2)} dB  (${outputs.rx_gain_absolute.toFixed(2)})`;
 
-    // Beam Divergence
+    // ── Beam Divergence ──────────────────────────────────────────────────
     document.getElementById('resultTxDivergence').textContent =
-        `${outputs.tx_beam_divergence_deg.toFixed(6)}° (${outputs.tx_beam_divergence_rad.toFixed(6)} rad)`;
+        `${outputs.tx_beam_divergence_deg.toFixed(6)}°  (${outputs.tx_beam_divergence_rad.toFixed(6)} rad)`;
     document.getElementById('resultRxDivergence').textContent =
-        `${outputs.rx_beam_divergence_deg.toFixed(6)}° (${outputs.rx_beam_divergence_rad.toFixed(6)} rad)`;
+        `${outputs.rx_beam_divergence_deg.toFixed(6)}°  (${outputs.rx_beam_divergence_rad.toFixed(6)} rad)`;
 
-    // Losses
-    document.getElementById('resultPathLoss').textContent = `${outputs.path_loss_db.toFixed(2)} dB`;
+    // ── Losses ───────────────────────────────────────────────────────────
+    document.getElementById('resultPathLoss').textContent  = `${outputs.path_loss_db.toFixed(2)} dB`;
     document.getElementById('resultTotalLoss').textContent = `${outputs.total_loss_db.toFixed(2)} dB`;
 
-    // Final Results
-    document.getElementById('resultRxPower').textContent =
-        `${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
-    document.getElementById('resultEfficiencies').textContent =
-        `Tx: ${outputs.tx_efficiency_percent.toFixed(2)}% | Rx: ${outputs.rx_efficiency_percent.toFixed(2)}%`;
+    // ── Power Budget — three result cards ────────────────────────────────
 
-    // Show results section
+    // 1. Rx Power WITHOUT LNA
+    document.getElementById('resultRxPowerNoLna').textContent =
+        `${outputs.received_power_dbm.toFixed(2)} dBm  (${formatPower(outputs.received_power_mw)} mW)`;
+
+    // 2. Rx Power WITH LNA
+    const lnaLabel = lnaGain > 0 ? ` [+${lnaGain.toFixed(1)} dB]` : ' [No LNA]';
+    document.getElementById('resultRxPowerLna').textContent =
+        `${outputs.received_power_lna_dbm.toFixed(2)} dBm  (${formatPower(outputs.received_power_lna_mw)} mW)${lnaLabel}`;
+
+    // 3. Link Margin (after LNA) — small card
+    const lmItem = document.getElementById('resultLinkMarginItem');
+    const lmSmall = document.getElementById('resultLinkMarginSmall');
+    lmSmall.textContent = linkMargin !== null ? `${linkMargin.toFixed(2)} dB` : '—';
+    if (linkMargin !== null && linkMargin > 0) {
+        lmItem.classList.remove('warning');
+        lmItem.classList.add('highlight');
+        lmSmall.style.color = '#28a745';
+    } else {
+        lmItem.classList.remove('highlight');
+        lmItem.classList.add('warning');
+        lmSmall.style.color = '#dc3545';
+    }
+
+    // Efficiencies
+    document.getElementById('resultEfficiencies').textContent =
+        `Tx: ${outputs.tx_efficiency_percent.toFixed(2)}%  |  Rx: ${outputs.rx_efficiency_percent.toFixed(2)}%`;
+
+    // Show results panel
     document.getElementById('results').classList.add('show');
 }
 
@@ -440,37 +457,33 @@ async function saveCalculation() {
         return;
     }
 
-    const saveBtn = document.getElementById('saveBtn');
+    const saveBtn      = document.getElementById('saveBtn');
     const originalText = saveBtn.textContent;
-    saveBtn.innerHTML = '<span class="loading"></span> Saving...';
-    saveBtn.disabled = true;
+    saveBtn.innerHTML  = '<span class="loading"></span> Saving...';
+    saveBtn.disabled   = true;
 
     try {
         const notes = prompt('Add notes (optional):');
 
         const response = await fetch(`${API_BASE_URL}/api/save`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
                 calculation_data: currentCalculationData,
-                notes: notes
+                notes:            notes
             })
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to save calculation');
-        }
+        if (!response.ok) throw new Error('Failed to save calculation');
 
         const data = await response.json();
-        showSuccess(`Calculation saved successfully! File: ${data.filename}`);
+        showSuccess(`Calculation saved! File: ${data.filename}`);
 
     } catch (error) {
         showError('Save error: ' + error.message);
     } finally {
         saveBtn.textContent = originalText;
-        saveBtn.disabled = false;
+        saveBtn.disabled    = false;
     }
 }
 
@@ -484,29 +497,24 @@ async function exportToPDF() {
         return;
     }
 
-    const pdfBtn = document.getElementById('pdfBtn');
+    const pdfBtn       = document.getElementById('pdfBtn');
     const originalText = pdfBtn.textContent;
-    pdfBtn.innerHTML = '<span class="loading"></span> Generating PDF...';
-    pdfBtn.disabled = true;
+    pdfBtn.innerHTML   = '<span class="loading"></span> Generating PDF...';
+    pdfBtn.disabled    = true;
 
     try {
         const response = await fetch(`${API_BASE_URL}/api/generate-pdf`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(currentCalculationData)
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(currentCalculationData)
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to generate PDF');
-        }
+        if (!response.ok) throw new Error('Failed to generate PDF');
 
-        // Download the PDF
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
         a.download = `optical_link_calculation_${new Date().getTime()}.pdf`;
         document.body.appendChild(a);
         a.click();
@@ -519,7 +527,7 @@ async function exportToPDF() {
         showError('PDF generation error: ' + error.message);
     } finally {
         pdfBtn.textContent = originalText;
-        pdfBtn.disabled = false;
+        pdfBtn.disabled    = false;
     }
 }
 
@@ -528,28 +536,31 @@ async function exportToPDF() {
 // ============================================================================
 
 function resetForm() {
-    // Clear all input fields
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => input.value = '');
+    document.querySelectorAll('input').forEach(input => input.value = '');
 
-    // Reset all selects to default values
-    document.getElementById('txPowerUnit').value = 'dBm';
-    document.getElementById('txEfficiencyUnit').value = '%';
-    document.getElementById('rxEfficiencyUnit').value = '%';
-    document.getElementById('rxSensitivityUnit').value = 'dBm';
-    document.getElementById('wavelengthUnit').value = 'nm';
-    document.getElementById('txDiameterUnit').value = 'm';
-    document.getElementById('rxDiameterUnit').value = 'm';
-    document.getElementById('distanceUnit').value = 'm';
-    document.getElementById('implLossUnit').value = 'dB';
-    document.getElementById('couplingLossUnit').value = 'dB';
-    document.getElementById('txPointingLossUnit').value = 'dB';
-    document.getElementById('rxPointingLossUnit').value = 'dB';
+    // Reset selects
+    const selects = {
+        txPowerUnit:        'dBm',
+        txEfficiencyUnit:   '%',
+        rxEfficiencyUnit:   '%',
+        rxSensitivityUnit:  'dBm',
+        wavelengthUnit:     'nm',
+        txDiameterUnit:     'm',
+        rxDiameterUnit:     'm',
+        distanceUnit:       'm',
+        implLossUnit:       'dB',
+        couplingLossUnit:   'dB',
+        txPointingLossUnit: 'dB',
+        rxPointingLossUnit: 'dB'
+    };
+    Object.entries(selects).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    });
 
-    // Hide results and errors
     document.getElementById('results').classList.remove('show');
     document.getElementById('saveBtn').disabled = true;
-    document.getElementById('pdfBtn').disabled = true;
+    document.getElementById('pdfBtn').disabled  = true;
     hideError();
     hideSuccess();
 
@@ -561,26 +572,20 @@ function resetForm() {
 // ============================================================================
 
 function togglePointingMode(type) {
-    const mode = document.querySelector(`input[name="${type}PointingMode"]:checked`).value;
+    const mode        = document.querySelector(`input[name="${type}PointingMode"]:checked`).value;
     const manualInput = document.getElementById(`${type}PointingManualInput`);
-    const errorInput = document.getElementById(`${type}PointingErrorInput`);
+    const errorInput  = document.getElementById(`${type}PointingErrorInput`);
 
     if (mode === 'manual') {
         manualInput.style.display = 'block';
-        errorInput.style.display = 'none';
-
-        // Clear value in error input to avoid confusion
+        errorInput.style.display  = 'none';
         document.getElementById(`${type}PointingError`).value = '';
     } else {
         manualInput.style.display = 'none';
-        errorInput.style.display = 'block';
-
-        // Clear value in manual input
-        document.getElementById(`${type}PointingLoss`).value = '';
+        errorInput.style.display  = 'block';
+        document.getElementById(`${type}PointingLoss`).value  = '';
     }
 }
-
-
 
 // ============================================================================
 // UI HELPERS
@@ -601,9 +606,7 @@ function showSuccess(message) {
     const successDiv = document.getElementById('successMsg');
     successDiv.textContent = message;
     successDiv.classList.add('show');
-    setTimeout(() => {
-        successDiv.classList.remove('show');
-    }, 5000);
+    setTimeout(() => successDiv.classList.remove('show'), 5000);
 }
 
 function hideSuccess() {
@@ -612,7 +615,6 @@ function hideSuccess() {
 
 function showWarning(message) {
     console.warn(message);
-    // Could add a warning UI element here
 }
 
 // ============================================================================
