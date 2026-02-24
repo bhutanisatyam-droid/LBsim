@@ -1,0 +1,994 @@
+<!-- 
+    DOCTYPE declaration: Tells the browser that this is an HTML5 document. 
+-->
+<!DOCTYPE html>
+
+<!-- 
+    The root element of the HTML page. 
+    lang="en" specifies that the content is in English, which helps search engines and screen readers.
+-->
+<html lang="en">
+
+<!-- 
+    The <head> section contains metadata about the document, such as title, character set, and styles.
+    This content is not displayed directly on the page but is essential for the browser.
+-->
+
+<head>
+    <!-- Sets the character encoding to UTF-8, which includes almost all characters and symbols. -->
+    <meta charset="UTF-8">
+
+    <!-- Ensures the page looks good on mobile devices by setting the viewport width to the device width. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- The title that appears in the browser tab. -->
+    <title>Optical Link Budget Calculator</title>
+
+    <!-- PWA (Progressive Web App) Meta Tags: These help the app look like a native app when installed. -->
+    <meta name="description" content="Professional optical link budget calculator with PDF export">
+    <meta name="theme-color" content="#007bff"> <!-- Sets the color of the browser toolbar on mobile. -->
+    <link rel="manifest" href="manifest.json"> <!-- Links to the manifest file for PWA installation info. -->
+    <link rel="apple-touch-icon" href="icon-192.png"> <!-- Icon for Apple devices. -->
+
+    <!-- 
+        The <style> block contains CSS (Cascading Style Sheets) which defines how the HTML elements look.
+        Normally this might be in a separate .css file, but here it's included directly.
+    -->
+    <style>
+        /* The asterisk (*) selects ALL elements. We set default margins and padding to 0. */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            /* Ensures padding doesn't add to the total width of elements. */
+        }
+
+        /* Styling for the main document body */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            /* Sets the font. */
+            background: linear-gradient(135deg, #0a1929 0%, #1a2332 50%, #0d1b2a 100%);
+            /* Dark blue gradient background. */
+            min-height: 100vh;
+            /* Ensures the body is at least as tall as the screen (viewport). */
+            padding: 20px;
+            color: #fff;
+            /* White text color. */
+        }
+
+        /* 
+           .container is a class. Classes are reusable styles prefixed with a dot (.).
+           This defines the main box that holds the calculator.
+        */
+        .container {
+            max-width: 1400px;
+            /* Maximum width of the box. */
+            margin: 0 auto;
+            /* Centers the box horizontally. */
+            background: rgba(0, 0, 0, 0.6);
+            /* Semi-transparent black background. */
+            border-radius: 20px;
+            /* Rounded corners. */
+            padding: 40px;
+            /* Inner spacing. */
+            box-shadow: 0 20px 60px rgba(0, 123, 255, 0.3);
+            /* Adds a glowing blue shadow. */
+            border: 1px solid rgba(0, 123, 255, 0.2);
+            /* Thin blue border. */
+        }
+
+        /* Styling for the main Heading (h1) */
+        h1 {
+            text-align: center;
+            color: #007bff;
+            /* Bright blue color. */
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            /* Large text size. */
+            text-shadow: 0 0 20px rgba(0, 123, 255, 0.5);
+            /* Glowing text effect. */
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6c757d;
+            /* Grey text. */
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+
+        /* Styles for the API status indicator (Online/Offline badge) */
+        .api-status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        /* Specific styles for when the API is online */
+        .api-status.online {
+            background: rgba(40, 167, 69, 0.2);
+            /* Green background */
+            border: 1px solid rgba(40, 167, 69, 0.5);
+            color: #28a745;
+            /* Green text */
+        }
+
+        /* Specific styles for when the API is offline */
+        .api-status.offline {
+            background: rgba(220, 53, 69, 0.2);
+            /* Red background */
+            border: 1px solid rgba(220, 53, 69, 0.5);
+            color: #dc3545;
+            /* Red text */
+        }
+
+        /* Grid layout for the form inputs. Makes them responsive. */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            /* Auto-fit columns, min width 350px. */
+            gap: 25px;
+            /* Space between grid items. */
+            margin-bottom: 30px;
+        }
+
+        /* The container for each input field + label */
+        .input-group {
+            background: rgba(0, 123, 255, 0.05);
+            /* Slight blue tint background */
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 123, 255, 0.2);
+            transition: all 0.3s ease;
+            /* Smooth animation when hovering. */
+        }
+
+        /* Hover effect for input groups */
+        .input-group:hover {
+            background: rgba(0, 123, 255, 0.1);
+            border-color: rgba(0, 123, 255, 0.4);
+            transform: translateY(-2px);
+            /* Moves slightly up. */
+        }
+
+        /* Adds a red asterisk (*) to required fields using CSS pseudo-element ::after */
+        .input-group.required label::after {
+            content: " *";
+            color: #dc3545;
+        }
+
+        .input-group label {
+            display: block;
+            /* Makes label take full width. */
+            margin-bottom: 10px;
+            color: #007bff;
+            font-weight: 600;
+            /* Bold text. */
+            font-size: 0.95em;
+        }
+
+        /* Flexbox to align Input field and Unit selector side-by-side */
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        /* Error message text styling */
+        .input-error {
+            color: #dc3545;
+            /* Red color */
+            font-size: 0.85em;
+            margin-top: 5px;
+            display: none;
+            /* Hidden by default */
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* Class that Javascript adds to SHOW the error message */
+        .input-error.show {
+            display: block;
+        }
+
+        /* Inputs take 2/3rds of space */
+        .value-input {
+            flex: 2;
+        }
+
+        /* Unit selectors take 1/3rd of space */
+        .unit-select {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        /* Styling for text inputs */
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(0, 123, 255, 0.3);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            /* Dark semi-transparent background */
+            color: #fff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            /* Removes default browser styling. */
+            -moz-appearance: textfield;
+        }
+
+        /* Removes up/down arrows from number inputs in some browsers */
+        .input-group input::-webkit-outer-spin-button,
+        .input-group input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Highlight styles when clicking inside an input (focus) */
+        .input-group input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.3);
+            /* Blue glow */
+        }
+
+        /* Styling for dropdown menus (select) */
+        .input-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(0, 123, 255, 0.3);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .input-group select:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 15px rgba(0, 123, 255, 0.3);
+        }
+
+        /* Background color for dropdown options */
+        .input-group select option {
+            background: #1a2332;
+            color: #fff;
+        }
+
+        /* Container for the main action buttons */
+        .button-group {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 30px 0;
+            flex-wrap: wrap;
+            /* Allows buttons to wrap to next line on small screens */
+        }
+
+        /* General button styles */
+        button {
+            padding: 15px 40px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            /* Fade out disabled buttons */
+            cursor: not-allowed;
+        }
+
+        /* Specific styles for Calculate Button */
+        .calculate-btn {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            box-shadow: 0 5px 20px rgba(0, 123, 255, 0.4);
+        }
+
+        .calculate-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            /* Pop up effect */
+            box-shadow: 0 8px 30px rgba(0, 123, 255, 0.6);
+        }
+
+        /* Specific styles for Reset Button */
+        .reset-btn {
+            background: linear-gradient(135deg, #343a40, #1a1d20);
+            color: white;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .reset-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Specific styles for Save Button */
+        .save-btn {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            /* Green */
+            color: white;
+            box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4);
+        }
+
+        .save-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(40, 167, 69, 0.6);
+        }
+
+        /* Specific styles for PDF Button */
+        .pdf-btn {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            /* Red */
+            color: white;
+            box-shadow: 0 5px 20px rgba(220, 53, 69, 0.4);
+        }
+
+        .pdf-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(220, 53, 69, 0.6);
+        }
+
+        /* Loading spinner animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            /* Uses the @keyframes spin below */
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Results container - hidden by default */
+        .results {
+            background: rgba(0, 123, 255, 0.05);
+            border: 2px solid rgba(0, 123, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+            display: none;
+            /* Allows Javascript to toggle visibility with .show */
+        }
+
+        .results.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .results h2 {
+            color: #007bff;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.8em;
+        }
+
+        .result-section {
+            margin-bottom: 30px;
+        }
+
+        .result-section h3 {
+            color: #0056b3;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid rgba(0, 123, 255, 0.3);
+            /* Underline style */
+            padding-bottom: 10px;
+        }
+
+        /* Grid for results items */
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        /* Individual result box style */
+        .result-item {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #007bff;
+            /* Blue accent bar on the left */
+        }
+
+        .result-item.highlight {
+            border-left: 4px solid #28a745;
+            /* Green accent bar for success */
+            background: rgba(40, 167, 69, 0.1);
+        }
+
+        .result-item.warning {
+            border-left: 4px solid #dc3545;
+            /* Red accent bar for warning */
+            background: rgba(220, 53, 69, 0.1);
+        }
+
+        .result-item .label {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+
+        .result-item .value {
+            color: #007bff;
+            font-size: 1.5em;
+            /* Large text for the value */
+            font-weight: 700;
+        }
+
+        .result-item.highlight .value {
+            color: #28a745;
+        }
+
+        .result-item.warning .value {
+            color: #dc3545;
+        }
+
+        /* Box for the main Link Margin status (Green/Red box) */
+        .link-margin-box {
+            background: linear-gradient(135deg, rgba(40, 167, 69, 0.2), rgba(40, 167, 69, 0.1));
+            border: 3px solid #28a745;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        /* Negative/Bad link margin styles */
+        .link-margin-box.negative {
+            background: linear-gradient(135deg, rgba(220, 53, 69, 0.2), rgba(220, 53, 69, 0.1));
+            border-color: #dc3545;
+        }
+
+        .link-margin-box .title {
+            font-size: 1.2em;
+            color: #6c757d;
+            margin-bottom: 10px;
+        }
+
+        .link-margin-box .margin-value {
+            font-size: 3em;
+            font-weight: 900;
+            color: #28a745;
+        }
+
+        .link-margin-box.negative .margin-value {
+            color: #dc3545;
+        }
+
+        .link-margin-box .status {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-top: 15px;
+            color: #28a745;
+        }
+
+        .link-margin-box.negative .status {
+            color: #dc3545;
+        }
+
+        /* Global Error/Success message boxes */
+        .error {
+            background: rgba(220, 53, 69, 0.1);
+            border: 2px solid rgba(220, 53, 69, 0.5);
+            color: #dc3545;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+            text-align: center;
+        }
+
+        .error.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .success {
+            background: rgba(40, 167, 69, 0.1);
+            border: 2px solid rgba(40, 167, 69, 0.5);
+            color: #28a745;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+            text-align: center;
+        }
+
+        .success.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        /* Media Query: Adjusts layout for screens smaller than 768px (Mobile) */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+                /* Single column on mobile */
+            }
+
+            .button-group {
+                flex-direction: column;
+                /* Stack buttons vertically */
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+
+        /* Styles for the "Pill" toggle switch (Manual vs Pointing Error) */
+        .toggle-group {
+            display: inline-flex;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 25px;
+            padding: 3px;
+            border: 1px solid rgba(0, 123, 255, 0.3);
+            margin-bottom: 12px;
+        }
+
+        .toggle-group input[type="radio"] {
+            display: none;
+            /* Hide the actual radio button circle */
+        }
+
+        .toggle-group label {
+            padding: 8px 18px;
+            border-radius: 22px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
+            color: #8899aa;
+            transition: all 0.3s ease;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .toggle-group label:hover {
+            color: #aabbcc;
+        }
+
+        /* Style for the functionality when a radio button is checked */
+        .toggle-group input[type="radio"]:checked+label {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(0, 123, 255, 0.4);
+        }
+    </style>
+</head>
+
+<!-- 
+    The <body> contains everything visible on the webpage. 
+-->
+
+<body>
+    <div class="container">
+        <!-- Main Headers -->
+        <h1>Optical Link Budget Calculator</h1>
+        <p class="subtitle">Professional calculation tool with PDF export and save functionality</p>
+
+        <!-- Status Bar: Javascript updates this text and class (api-status) based on connection -->
+        <div id="apiStatus" class="api-status offline">
+            ⚠️ Backend API: Checking connection...
+        </div>
+
+        <!-- The main form area using Grid layout -->
+        <div class="form-grid">
+
+            <!-- 
+                INPUT GROUP: Transmitter Power 
+                id="txPower" is used by Javascript to get the value.
+            -->
+            <div class="input-group required">
+                <label for="txPower">Transmitter Power</label>
+                <div class="input-row">
+                    <!-- inputmode="decimal" helps mobile keyboards show numbers -->
+                    <input type="text" inputmode="decimal" id="txPower" class="value-input" placeholder="Enter value">
+                    <select id="txPowerUnit" class="unit-select">
+                        <option value="dBm">dBm</option>
+                        <option value="mW">mW</option>
+                        <option value="W">W</option>
+                    </select>
+                </div>
+                <div class="input-error" id="txPower-error"></div> <!-- Javascript puts validation errors here -->
+            </div>
+
+            <!-- INPUT GROUP: Transmitter Efficiency -->
+            <div class="input-group required">
+                <label for="txEfficiency">Transmitter Efficiency</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="txEfficiency" class="value-input"
+                        placeholder="Enter value">
+                    <select id="txEfficiencyUnit" class="unit-select">
+                        <option value="%">%</option>
+                        <option value="decimal">Decimal</option>
+                    </select>
+                </div>
+                <div class="input-error" id="txEfficiency-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Receiver Efficiency -->
+            <div class="input-group required">
+                <label for="rxEfficiency">Receiver Efficiency</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="rxEfficiency" class="value-input"
+                        placeholder="Enter value">
+                    <select id="rxEfficiencyUnit" class="unit-select">
+                        <option value="%">%</option>
+                        <option value="decimal">Decimal</option>
+                    </select>
+                </div>
+                <div class="input-error" id="rxEfficiency-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Receiver Sensitivity -->
+            <div class="input-group required">
+                <label for="rxSensitivity">Receiver Sensitivity</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="rxSensitivity" class="value-input"
+                        placeholder="Enter value (e.g., -60)">
+                    <select id="rxSensitivityUnit" class="unit-select">
+                        <option value="dBm">dBm</option>
+                        <option value="mW">mW</option>
+                        <option value="W">W</option>
+                    </select>
+                </div>
+                <div class="input-error" id="rxSensitivity-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Optical Wavelength -->
+            <div class="input-group required">
+                <label for="wavelength">Optical Wavelength</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="wavelength" class="value-input"
+                        placeholder="Enter value">
+                    <select id="wavelengthUnit" class="unit-select">
+                        <option value="nm">nm</option>
+                        <option value="μm">μm</option>
+                        <option value="m">m</option>
+                    </select>
+                </div>
+                <div class="input-error" id="wavelength-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Transmitter Diameter -->
+            <div class="input-group required">
+                <label for="txDiameter">Transmitter Diameter</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="txDiameter" class="value-input"
+                        placeholder="Enter value">
+                    <select id="txDiameterUnit" class="unit-select">
+                        <option value="m">m</option>
+                        <option value="cm">cm</option>
+                        <option value="mm">mm</option>
+                    </select>
+                </div>
+                <div class="input-error" id="txDiameter-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Receiver Diameter -->
+            <div class="input-group required">
+                <label for="rxDiameter">Receiver Diameter</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="rxDiameter" class="value-input"
+                        placeholder="Enter value">
+                    <select id="rxDiameterUnit" class="unit-select">
+                        <option value="m">m</option>
+                        <option value="cm">cm</option>
+                        <option value="mm">mm</option>
+                    </select>
+                </div>
+                <div class="input-error" id="rxDiameter-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Distance -->
+            <div class="input-group required">
+                <label for="distance">Distance (Transmitter to Receiver)</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="distance" class="value-input" placeholder="Enter value">
+                    <select id="distanceUnit" class="unit-select">
+                        <option value="m">m</option>
+                        <option value="km">km</option>
+                        <option value="cm">cm</option>
+                    </select>
+                </div>
+                <div class="input-error" id="distance-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Implementation Loss (Optional) -->
+            <div class="input-group">
+                <label for="implLoss">Implementation Loss (Optional)</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="implLoss" class="value-input" placeholder="0">
+                    <select id="implLossUnit" class="unit-select">
+                        <option value="dB">dB</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                </div>
+                <div class="input-error" id="implLoss-error"></div>
+            </div>
+
+            <!-- INPUT GROUP: Coupling Loss (Optional) -->
+            <div class="input-group">
+                <label for="couplingLoss">Coupling Loss (Optional)</label>
+                <div class="input-row">
+                    <input type="text" inputmode="decimal" id="couplingLoss" class="value-input" placeholder="0">
+                    <select id="couplingLossUnit" class="unit-select">
+                        <option value="dB">dB</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                </div>
+                <div class="input-error" id="couplingLoss-error"></div>
+            </div>
+
+            <!-- 
+                COMPLEX INPUT GROUP: Transmitter Pointing 
+                Has a toggle switch to choose between "Manual Loss" or "Pointing Error"
+            -->
+            <div class="input-group">
+                <label>Transmitter Pointing</label>
+
+                <!-- Toggle Switch Area -->
+                <div class="toggle-group">
+                    <!-- Radio buttons have the same 'name' so only one can be checked at a time -->
+                    <!-- onchange="togglePointingMode('tx')" calls Javascript to switch the input fields -->
+                    <input type="radio" name="txPointingMode" value="manual" id="txModeManual" checked
+                        onchange="togglePointingMode('tx')">
+                    <label for="txModeManual">Manual Loss (dB)</label>
+                    <input type="radio" name="txPointingMode" value="error" id="txModeError"
+                        onchange="togglePointingMode('tx')">
+                    <label for="txModeError">Pointing Error</label>
+                </div>
+
+                <!-- Input Field for Manual Loss (Visible by default) -->
+                <div id="txPointingManualInput">
+                    <div class="input-row">
+                        <input type="text" inputmode="decimal" id="txPointingLoss" class="value-input" placeholder="0">
+                        <select id="txPointingLossUnit" class="unit-select">
+                            <option value="dB">dB</option>
+                            <option value="linear">Linear</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Input Field for Pointing Error (Hidden by default, style="display: none;") -->
+                <div id="txPointingErrorInput" style="display: none;">
+                    <div class="input-row">
+                        <input type="text" inputmode="decimal" id="txPointingError" class="value-input"
+                            placeholder="Enter error">
+                        <select id="txPointingErrorUnit" class="unit-select">
+                            <option value="urad">μrad</option>
+                            <option value="rad">rad</option>
+                            <option value="nrad">nrad</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                        Calculated Loss: L = exp(-G_tx * θ²)
+                    </div>
+                </div>
+                <div class="input-error" id="txPointingLoss-error"></div>
+            </div>
+
+            <!-- COMPLEX INPUT GROUP: Receiver Pointing (Same logic as above) -->
+            <div class="input-group">
+                <label>Receiver Pointing</label>
+                <div class="toggle-group">
+                    <input type="radio" name="rxPointingMode" value="manual" id="rxModeManual" checked
+                        onchange="togglePointingMode('rx')">
+                    <label for="rxModeManual">Manual Loss (dB)</label>
+                    <input type="radio" name="rxPointingMode" value="error" id="rxModeError"
+                        onchange="togglePointingMode('rx')">
+                    <label for="rxModeError">Pointing Error</label>
+                </div>
+
+                <!-- Manual Loss Input -->
+                <div id="rxPointingManualInput">
+                    <div class="input-row">
+                        <input type="text" inputmode="decimal" id="rxPointingLoss" class="value-input" placeholder="0">
+                        <select id="rxPointingLossUnit" class="unit-select">
+                            <option value="dB">dB</option>
+                            <option value="linear">Linear</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Pointing Error Input -->
+                <div id="rxPointingErrorInput" style="display: none;">
+                    <div class="input-row">
+                        <input type="text" inputmode="decimal" id="rxPointingError" class="value-input"
+                            placeholder="Enter error">
+                        <select id="rxPointingErrorUnit" class="unit-select">
+                            <option value="urad">μrad</option>
+                            <option value="rad">rad</option>
+                            <option value="nrad">nrad</option>
+                        </select>
+                    </div>
+                    <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
+                        Calculated Loss: L = exp(-G_rx * θ²)
+                    </div>
+                </div>
+                <div class="input-error" id="rxPointingLoss-error"></div>
+            </div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="button-group">
+            <!-- onclick="calculateLinkBudget()" triggers the main Javascript function -->
+            <button class="calculate-btn" onclick="calculateLinkBudget()" id="calculateBtn">
+                Calculate
+            </button>
+            <button class="reset-btn" onclick="resetForm()">Reset</button>
+            <!-- Disabled by default until calculation is done -->
+            <button class="save-btn" onclick="saveCalculation()" id="saveBtn" disabled>
+                Save Calculation
+            </button>
+            <button class="pdf-btn" onclick="exportToPDF()" id="pdfBtn" disabled>
+                Export to PDF
+            </button>
+        </div>
+
+        <!-- Hidden message boxes for success/error feedback -->
+        <div class="error" id="errorMsg"></div>
+        <div class="success" id="successMsg"></div>
+
+        <!-- RESULTS SECTION (Hidden initially via CSS .results { display: none; }) -->
+        <div class="results" id="results">
+            <h2>Calculation Results</h2>
+
+            <!-- Link Margin Highlight Box (Green/Red) -->
+            <div id="linkMarginBox" class="link-margin-box">
+                <div class="title">Link Margin</div>
+                <div class="margin-value" id="linkMarginValue">0.00 dB</div>
+                <div class="status" id="linkStatus">LINK STATUS</div>
+                <div style="margin-top: 15px; font-size: 0.85em; color: #b0b0b0;">
+                    <div id="linkMarginRxPower" style="margin: 5px 0;">Received: -</div>
+                    <div id="linkMarginSensitivity" style="margin: 5px 0;">Required: -</div>
+                </div>
+            </div>
+
+            <!-- Input Summary Section -->
+            <div class="result-section">
+                <h3>Input Parameters</h3>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <div class="label">Transmitter Power</div>
+                        <div class="value" id="resultTxPower">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Receiver Sensitivity</div>
+                        <div class="value" id="resultRxSensitivity">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Distance</div>
+                        <div class="value" id="resultDistance">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Wavelength</div>
+                        <div class="value" id="resultWavelength">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Antenna Gains -->
+            <div class="result-section">
+                <h3>Antenna Gains</h3>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <div class="label">Transmitter Gain</div>
+                        <div class="value" id="resultTxGain">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Receiver Gain</div>
+                        <div class="value" id="resultRxGain">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Beam Divergence -->
+            <div class="result-section">
+                <h3>Beam Divergence</h3>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <div class="label">Tx Beam Divergence</div>
+                        <div class="value" id="resultTxDivergence">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Rx Beam Divergence</div>
+                        <div class="value" id="resultRxDivergence">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Losses -->
+            <div class="result-section">
+                <h3>Losses</h3>
+                <div class="result-grid">
+                    <div class="result-item">
+                        <div class="label">Path Loss</div>
+                        <div class="value" id="resultPathLoss">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Total Losses</div>
+                        <div class="value" id="resultTotalLoss">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Final Power Budget -->
+            <div class="result-section">
+                <h3>Power Budget</h3>
+                <div class="result-grid">
+                    <div class="result-item highlight">
+                        <div class="label">Received Power</div>
+                        <div class="value" id="resultRxPower">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Efficiencies</div>
+                        <div class="value" id="resultEfficiencies">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 
+        External Javascript Files
+        app_v2.js contains all the logic for calculations, API calls, and UI updates.
+        sw.js (Service Worker) is likely handled within app_v2.js or the script block below.
+    -->
+    <script src="app_v2.js"></script>
+
+    <!-- Inline script for Service Worker cleanup (Debugging purposes) -->
+    <script>
+        // Checks if browser supports Service Workers
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (registrations) {
+                for (let registration of registrations) {
+                    console.log('Unregistering SW:', registration);
+                    registration.unregister(); // Removes old service workers to ensure fresh code runs
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

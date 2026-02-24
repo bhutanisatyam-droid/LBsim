@@ -1,0 +1,326 @@
+﻿commit dd8d6aa84b3e47b7a0f0f4d19b92de5e6a6f2e56
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Sat Feb 21 09:39:28 2026 +0530
+
+    Update transmitter gain formula and clean up backend documentation
+
+diff --git a/backend/main.py b/backend/main.py
+index 4dc70c9..3e7b59f 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -123,10 +123,10 @@ def linear_to_db(linear: float) -> float:
+ # CORE CALCULATIONS (MATCHING MATLAB)
+ # ============================================================================
+ 
+-def calculate_tx_antenna_gain(theta: float) -> tuple:
+-    """Calculate Transmitter antenna gain (absolute and dB) using beam divergence
+-    MATLAB: tx_absGain = 32 / theta^2"""
+-    gain_absolute = 32 / (theta ** 2)
++def calculate_tx_antenna_gain(diameter: float, wavelength_m: float) -> tuple:
++    """Calculate Transmitter antenna gain (absolute and dB) using aperture diameter
++    Formula: tx_absGain = (pi * tx_D / op_wv)^2"""
++    gain_absolute = (PI * diameter / wavelength_m) ** 2
+     gain_db = 10 * math.log10(gain_absolute)
+     return gain_absolute, gain_db
+ 
+@@ -179,12 +179,14 @@ def calculate_link_budget(inputs: CalculationInput) -> Dict[str, float]:
+     """Main link budget calculation function"""
+     wavelength_m = inputs.wavelength * 1e-9
+     
+-    # Calculate Beam Divergence FIRST as it's needed for Tx Gain
++    # Calculate Beam Divergence (still returned in results)
+     tx_beam_divergence = calculate_beam_divergence(wavelength_m, inputs.tx_diameter)
+     rx_beam_divergence = calculate_beam_divergence(wavelength_m, inputs.rx_diameter)
+ 
+-    # Tx Gain uses Theta (Beam Divergence) - MATLAB formula
+-    tx_gain_abs, tx_gain_db = calculate_tx_antenna_gain(tx_beam_divergence)
++    # Tx Gain uses Diameter - now matches Rx formula
++    tx_gain_abs, tx_gain_db = calculate_tx_antenna_gain(
++        inputs.tx_diameter, wavelength_m
++    )
+     
+     # Rx Gain uses Diameter - MATLAB formula
+     rx_gain_abs, rx_gain_db = calculate_rx_antenna_gain(
+
+commit 34fcf7731d53da5616955d311d97b577ba22356d
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Tue Feb 17 11:05:01 2026 +0530
+
+    Fix pointing error math domain crash in backend/main.py
+
+diff --git a/backend/main.py b/backend/main.py
+index 83000d3..4dc70c9 100644
+--- a/backend/main.py
++++ b/backend/main.py
+@@ -150,7 +150,21 @@ def calculate_pointing_loss(gain_abs: float, error_rad: float) -> float:
+     if error_rad is None or error_rad == 0:
+         return 0.0
+         
+-    loss_linear = math.exp(-gain_abs * (error_rad ** 2))
++    # Python's math.exp raises OverflowError for very large inputs, 
++    # but underflows to 0.0 for very small inputs (exponent < -700 approx).
++    # If it underflows to 0.0, math.log10(0.0) raises ValueError: math domain error.
++    exponent = -gain_abs * (error_rad ** 2)
++    
++    # If loss is extremely high (signal effectively zero), return capped max loss
++    if exponent < -700:
++        return 1000.0
++        
++    loss_linear = math.exp(exponent)
++    
++    # Extra safety check for 0.0
++    if loss_linear <= 0:
++         return 1000.0
++
+     # Convert to dB (will be negative)
+     loss_db = 10 * math.log10(loss_linear)
+     # Return absolute value for link budget subtraction
+
+commit 06f29451362b3f9a09d942937a9ed4514db7f64e
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 02:21:33 2026 +0530
+
+    Fix: 0mW display issue (scientific notation) and add calculation logic docs
+
+diff --git a/calculation_logic.md b/calculation_logic.md
+new file mode 100644
+index 0000000..b299209
+--- /dev/null
++++ b/calculation_logic.md
+@@ -0,0 +1,87 @@
++# Optical Link Budget Calculation Logic
++
++This document details the mathematical models and formulas used in `backend/main.py`.
++
++## 1. Core Constants & Conversions
++- **$\pi$ (Pi)**: `3.14159265359`
++- **Wavelength ($\lambda$)**: Converted from nanometers (nm) to meters (m).
++  - `wavelength_m = inputs.wavelength * 1e-9`
++- **Distance ($d$)**: In meters.
++
++---
++
++## 2. Geometric Parameters
++
++### 2.1 Beam Divergence ($\theta$)
++Calculated from wavelength and aperture diameter (diffraction limit approximation).
++- **Formula:** $\theta = \frac{2.44 \cdot \lambda}{D}$
++- **Code:** `(2.44 * wavelength_m) / diameter`
++- **Units:** Radians
++
++### 2.2 Antenna Gains
++The gain is calculated differently for Transmitter (based on divergence) and Receiver (based on area).
++
++**Transmitter Gain ($G_{tx}$)**
++- **Formula (Absolute):** $G_{tx} = \frac{32}{\theta^2}$
++- **Formula (dB):** $G_{tx(dB)} = 10 \log_{10}(G_{tx})$
++- **Source:** Matches MATLAB script typical approximation for Gaussian beams.
++
++**Receiver Gain ($G_{rx}$)**
++- **Formula (Absolute):** $G_{rx} = (\frac{\pi \cdot D_{rx}}{\lambda})^2$
++- **Formula (dB):** $G_{rx(dB)} = 10 \log_{10}(G_{rx})$
++- **Source:** Standard aperture gain formula.
++
++---
++
++## 3. Losses
++
++### 3.1 Free Space Path Loss ($L_{fs}$)
++Loss due to signal spreading over distance.
++- **Formula:** $L_{fs} = 20 \log_{10}(\frac{4 \pi d}{\lambda})$
++- **Code:** `20 * math.log10((4 * PI * distance) / wavelength_m)`
++
++### 3.2 Pointing Loss ($L_{point}$)
++Loss due to misalignment errors ($\theta_{error}$).
++- **Formula:** $L_{point} = \left| 10 \log_{10}(e^{-G \cdot \theta_{error}^2}) \right|$
++- **Code:** `abs(10 * math.log10(math.exp(-gain_abs * (error_rad ** 2))))`
++- **Logic:**
++  - Uses specific gain ($G_{tx}$ or $G_{rx}$) depending on which end has the error.
++  - Returns absolute dB value to be subtracted later.
++
++### 3.3 Efficiencies
++Converting percentage efficiency to dB loss/gain factor.
++- **Formula:** $E_{dB} = 10 \log_{10}(\frac{Efficiency\%}{100})$
++- **Note:** This usually results in a negative dB value (loss).
++
++---
++
++## 4. Total Link Budget Equation
++
++The received power ($P_{rx}$) is the sum of gains minus the sum of losses.
++
++$$ P_{rx} = P_{tx} + G_{tx} + G_{rx} + E_{tx} + E_{rx} - L_{total} $$
++
++Where:
++- $P_{tx}$ = Transmitter Power (dBm)
++- $G_{tx}, G_{rx}$ = Antenna Gains (dB)
++- $E_{tx}, E_{rx}$ = Efficiencies (dB)
++- $L_{total}$ = Sum of all losses (Path Loss + Pointing Loss + Implementation Loss + Coupling Loss)
++
++**Code Implementation:**
++```python
++received_power_dbm = (
++    inputs.tx_power +
++    tx_efficiency_db +
++    rx_efficiency_db +
++    tx_gain_db +
++    rx_gain_db -
++    total_loss_db
++)
++```
++
++## 5. Link Margin
++The safety margin above the receiver's sensitivity threshold.
++- **Formula:** $Margin = P_{rx} - Sensitivity_{rx}$
++- **Result:**
++  - $> 0$ dB: **Link Viable**
++  - $< 0$ dB: **Link Not Viable**
+diff --git a/frontend/app_v2.js b/frontend/app_v2.js
+index 6316103..b191276 100644
+--- a/frontend/app_v2.js
++++ b/frontend/app_v2.js
+@@ -168,10 +168,18 @@ function convertLossToDb(value, unit) {
+     switch (unit) {
+         case 'dB': return value;
+         case 'linear': return linearToDb(value);
++        case 'linear': return linearToDb(value);
+         default: return value;
+     }
+ }
+ 
++// Smart formatting for power values
++function formatPower(mw) {
++    if (mw === 0) return "0.000000";
++    if (Math.abs(mw) < 0.0001) return mw.toExponential(4);
++    return mw.toFixed(6);
++}
++
+ // ============================================================================
+ // MAIN CALCULATION FUNCTION
+ // ============================================================================
+@@ -361,7 +369,8 @@ function displayResults(outputs) {
+     const linkMarginMw = outputs.received_power_mw - outputs.rx_sensitivity_mw;
+ 
+     // Display margin in dB and mW
+-    linkMarginValue.textContent = `${linkMargin.toFixed(2)} dB (${linkMarginMw.toFixed(6)} mW)`;
++    // Display margin in dB and mW
++    linkMarginValue.textContent = `${linkMargin.toFixed(2)} dB (${formatPower(linkMarginMw)} mW)`;
+ 
+     // Update power details in Link Margin box
+     const rxPowerElement = document.getElementById('linkMarginRxPower');
+@@ -369,9 +378,9 @@ function displayResults(outputs) {
+ 
+     if (rxPowerElement && sensitivityElement) {
+         rxPowerElement.textContent =
+-            `Received: ${outputs.received_power_dbm.toFixed(2)} dBm (${outputs.received_power_mw.toFixed(6)} mW)`;
++            `Received: ${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
+         sensitivityElement.textContent =
+-            `Required: ${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${outputs.rx_sensitivity_mw.toFixed(9)} mW)`;
++            `Required: ${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
+     }
+ 
+     if (linkMargin > 0) {
+@@ -387,9 +396,9 @@ function displayResults(outputs) {
+ 
+     // Input Parameters
+     document.getElementById('resultTxPower').textContent =
+-        `${outputs.tx_power_dbm.toFixed(2)} dBm (${outputs.tx_power_mw.toFixed(6)} mW)`;
++        `${outputs.tx_power_dbm.toFixed(2)} dBm (${formatPower(outputs.tx_power_mw)} mW)`;
+     document.getElementById('resultRxSensitivity').textContent =
+-        `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${outputs.rx_sensitivity_mw.toFixed(9)} mW)`;
++        `${outputs.rx_sensitivity_dbm.toFixed(2)} dBm (${formatPower(outputs.rx_sensitivity_mw)} mW)`;
+     document.getElementById('resultDistance').textContent =
+         `${outputs.distance_m.toFixed(2)} m (${outputs.distance_km.toFixed(3)} km)`;
+     document.getElementById('resultWavelength').textContent =
+@@ -413,7 +422,7 @@ function displayResults(outputs) {
+ 
+     // Final Results
+     document.getElementById('resultRxPower').textContent =
+-        `${outputs.received_power_dbm.toFixed(2)} dBm (${outputs.received_power_mw.toFixed(6)} mW)`;
++        `${outputs.received_power_dbm.toFixed(2)} dBm (${formatPower(outputs.received_power_mw)} mW)`;
+     document.getElementById('resultEfficiencies').textContent =
+         `Tx: ${outputs.tx_efficiency_percent.toFixed(2)}% | Rx: ${outputs.rx_efficiency_percent.toFixed(2)}%`;
+ 
+@@ -571,29 +580,7 @@ function togglePointingMode(type) {
+     }
+ }
+ 
+-// ============================================================================
+-// UI TOGGLES
+-// ============================================================================
+-
+-function togglePointingMode(type) {
+-    const mode = document.querySelector(`input[name="${type}PointingMode"]:checked`).value;
+-    const manualInput = document.getElementById(`${type}PointingManualInput`);
+-    const errorInput = document.getElementById(`${type}PointingErrorInput`);
+-
+-    if (mode === 'manual') {
+-        manualInput.style.display = 'block';
+-        errorInput.style.display = 'none';
+ 
+-        // Clear value in error input to avoid confusion
+-        document.getElementById(`${type}PointingError`).value = '';
+-    } else {
+-        manualInput.style.display = 'none';
+-        errorInput.style.display = 'block';
+-
+-        // Clear value in manual input
+-        document.getElementById(`${type}PointingLoss`).value = '';
+-    }
+-}
+ 
+ // ============================================================================
+ // UI HELPERS
+
+commit d0bac5335465b9a9069c4cb60d4abbd0cf986f8c
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 01:47:51 2026 +0530
+
+    Fix Render: use Python 3.11.9 and pure-Python uvicorn
+
+diff --git a/.python-version b/.python-version
+new file mode 100644
+index 0000000..2419ad5
+--- /dev/null
++++ b/.python-version
+@@ -0,0 +1 @@
++3.11.9
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 09906f2..55bac6d 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -1,5 +1,5 @@
+ fastapi>=0.109.0
+-uvicorn[standard]>=0.27.0
++uvicorn>=0.27.0
+ pydantic>=2.5.3
+ python-multipart>=0.0.6
+ reportlab>=4.0.9
+
+commit 82b7bfc96c2c15d09ec035785e4ba63ef484228c
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 01:45:35 2026 +0530
+
+    Fix Render build: relax dependencies to use binary wheels
+
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 960bd2a..09906f2 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -1,8 +1,8 @@
+-fastapi==0.109.0
+-uvicorn[standard]==0.27.0
+-pydantic==2.5.3
+-python-multipart==0.0.6
+-reportlab==4.0.9
+-pypdf==4.0.1
+-python-dateutil==2.8.2
+-aiofiles==23.2.1
++fastapi>=0.109.0
++uvicorn[standard]>=0.27.0
++pydantic>=2.5.3
++python-multipart>=0.0.6
++reportlab>=4.0.9
++pypdf>=4.0.1
++python-dateutil>=2.8.2
++aiofiles>=23.2.1

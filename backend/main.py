@@ -32,10 +32,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Storage directory
-STORAGE_DIR = "saved_calculations"
+# Storage directory - use the user's Documents folder so it persists outside the temporary .exe
+import pathlib
+docs_dir = os.path.join(pathlib.Path.home(), "Documents", "OpticalLinkCalculations")
+STORAGE_DIR = docs_dir
 os.makedirs(STORAGE_DIR, exist_ok=True)
-
 
 # ============= INLINE CALCULATIONS =============
 
@@ -64,7 +65,7 @@ def calculate_beam_divergence(wavelength_m, diameter_m):
     return 2.44 * (wavelength_m / diameter_m)
 
 def calculate_antenna_gain(efficiency, wavelength_m, diameter_m):
-    gain_abs = efficiency * ((PI * diameter_m / wavelength_m) ** 2)
+    gain_abs = ((PI * diameter_m / wavelength_m) ** 2)
     gain_db  = linear_to_db(gain_abs)
     return gain_db, gain_abs
 
@@ -102,6 +103,24 @@ def validate_inputs(params):
         return False, "; ".join(errors)
     return True, None
 
+def calculate_pointing_loss(gain_abs, error_rad):
+    if not error_rad or error_rad <= 0:
+        return 0.0
+        
+    exponent = -gain_abs * (error_rad ** 2)
+    
+    # Safe fallback for extreme pointing error to prevent math range error
+    if exponent < -700:
+        return 1000.0
+        
+    loss_linear = math.exp(exponent)
+    
+    if loss_linear <= 0:
+         return 1000.0
+
+    loss_db = 10 * math.log10(loss_linear)
+    return abs(loss_db)
+
 def calculate_link_budget(params):
     p_tx_dbm             = params['tx_power_dbm']
     tx_efficiency        = params['tx_efficiency']
@@ -114,6 +133,8 @@ def calculate_link_budget(params):
     coupling_loss_db     = params.get('coupling_loss_db', 0)
     tx_pointing_loss_db  = params.get('tx_pointing_loss_db', 0)
     rx_pointing_loss_db  = params.get('rx_pointing_loss_db', 0)
+    tx_pointing_error_rad= params.get('tx_pointing_error_rad', None)
+    rx_pointing_error_rad= params.get('rx_pointing_error_rad', None)
     p_rx_sensitivity_dbm = params.get('rx_sensitivity_dbm', None)
     rx_lna_gain_db       = params.get('rx_lna_gain_db', 0)
 
@@ -123,12 +144,18 @@ def calculate_link_budget(params):
     g_tx_db, g_tx_abs = calculate_antenna_gain(tx_efficiency, wavelength_m, tx_diameter_m)
     g_rx_db, g_rx_abs = calculate_antenna_gain(rx_efficiency, wavelength_m, rx_diameter_m)
 
+    if tx_pointing_error_rad and tx_pointing_error_rad > 0:
+        tx_pointing_loss_db = calculate_pointing_loss(g_tx_abs, tx_pointing_error_rad)
+        
+    if rx_pointing_error_rad and rx_pointing_error_rad > 0:
+        rx_pointing_loss_db = calculate_pointing_loss(g_rx_abs, rx_pointing_error_rad)
+
     path_loss_db = calculate_free_space_path_loss(distance_m, wavelength_m)
 
     total_loss_db = (path_loss_db + impl_loss_db + coupling_loss_db +
                      tx_pointing_loss_db + rx_pointing_loss_db)
 
-    rcvd_power_dbm = p_tx_dbm + g_tx_db + g_rx_db - total_loss_db
+    rcvd_power_dbm = p_tx_dbm + g_tx_db + g_rx_db - total_loss_db + 10*math.log10(tx_efficiency)+ 10*math.log10(rx_efficiency)
     rcvd_power_mw  = dbm_to_mw(rcvd_power_dbm)
     rcvd_power_w   = dbm_to_w(rcvd_power_dbm)
 
@@ -258,6 +285,8 @@ class LinkBudgetInput(BaseModel):
     coupling_loss_db:       Optional[float] = Field(0, ge=0)
     tx_pointing_loss_db:    Optional[float] = Field(0, ge=0)
     rx_pointing_loss_db:    Optional[float] = Field(0, ge=0)
+    tx_pointing_error_rad:  Optional[float] = Field(None, ge=0)
+    rx_pointing_error_rad:  Optional[float] = Field(None, ge=0)
 
 
 class SaveCalculationRequest(BaseModel):
@@ -619,22 +648,50 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
 @app.post("/api/generate-pdf")
 async def generate_pdf(calculation_data: dict):
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-            output_path = tmp.name
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_name = "optical_link_calculation"
+        
+        # Try to extract the calculation name if it was passed inside the inputs dict or similar
+        inputs_data = calculation_data.get('inputs', {})
+        if isinstance(inputs_data, dict) and 'name' in inputs_data:
+            safe_name = "".join(
+                c for c in inputs_data['name'] if c.isalnum() or c in (' ', '-', '_')
+            ).strip().replace(' ', '_')
+            if not safe_name:
+                safe_name = "optical_link_calculation"
+                
+        filename = f"{safe_name}_{timestamp}.pdf"
+        output_path = os.path.join(STORAGE_DIR, filename)
+
         generate_pdf_report(calculation_data, output_path)
-        return FileResponse(
-            output_path,
-            media_type='application/pdf',
-            filename=f"optical_link_calculation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        )
+        
+        return {
+            "success": True, 
+            "message": "PDF generated", 
+            "filename": filename,
+            "path": output_path
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF generation error: {str(e)}")
 
 
 # ============= SERVE FRONTEND =============
 
+import sys
+
+def get_base_path():
+    """Get the absolute path to the resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return base_path
+
 # Mount frontend AFTER all API routes so API routes take priority
-frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+base_dir = get_base_path()
+frontend_path = os.path.join(base_dir, 'frontend')
+
 if os.path.exists(frontend_path):
     app.mount("/", StaticFiles(directory=frontend_path, html=True), name="static")
 

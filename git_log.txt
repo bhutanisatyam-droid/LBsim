@@ -1,0 +1,29 @@
+﻿commit dd8d6aa84b3e47b7a0f0f4d19b92de5e6a6f2e56
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Sat Feb 21 09:39:28 2026 +0530
+
+    Update transmitter gain formula and clean up backend documentation
+
+commit 34fcf7731d53da5616955d311d97b577ba22356d
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Tue Feb 17 11:05:01 2026 +0530
+
+    Fix pointing error math domain crash in backend/main.py
+
+commit 06f29451362b3f9a09d942937a9ed4514db7f64e
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 02:21:33 2026 +0530
+
+    Fix: 0mW display issue (scientific notation) and add calculation logic docs
+
+commit d0bac5335465b9a9069c4cb60d4abbd0cf986f8c
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 01:47:51 2026 +0530
+
+    Fix Render: use Python 3.11.9 and pure-Python uvicorn
+
+commit 82b7bfc96c2c15d09ec035785e4ba63ef484228c
+Author: Satyam Bhutiani <bhutani.satyam@gmail.com>
+Date:   Thu Feb 12 01:45:35 2026 +0530
+
+    Fix Render build: relax dependencies to use binary wheels
