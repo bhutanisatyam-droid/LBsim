@@ -3,7 +3,7 @@
  * Caches static assets and API responses
  */
 
-const CACHE_NAME = 'optical-calc-v2';
+const CACHE_NAME = 'optical-calc-v3';
 const urlsToCache = [
   '/',
   '/index.html',
