@@ -7,6 +7,8 @@
 const API_BASE_URL = '';
 let currentCalculationData = null;
 let sweepChartInstance = null;
+let currentSweepResults = null;
+let currentSweepParamKey = null;
 
 // ─── Sweep state ──────────────────────────────────────────────────────────────
 // Maps a UI param key -> { apiKey, label, toSI, formatVal }
@@ -15,19 +17,37 @@ let sweepChartInstance = null;
 const POINTING_KEYS = new Set(['txPointing', 'rxPointing']);
 
 const SWEEP_PARAMS = {
-    txPower: { apiKey: 'tx_power_dbm', label: 'Transmitter Power', unit: 'dBm', toSI: v => v },
-    txEfficiency: { apiKey: 'tx_efficiency', label: 'Tx Efficiency', unit: '%', toSI: v => v / 100 },
-    rxEfficiency: { apiKey: 'rx_efficiency', label: 'Rx Efficiency', unit: '%', toSI: v => v / 100 },
-    rxSensitivity: { apiKey: 'rx_sensitivity_dbm', label: 'Rx Sensitivity', unit: 'dBm', toSI: v => v },
-    rxLnaGain: { apiKey: 'rx_lna_gain_db', label: 'Rx LNA Gain', unit: 'dB', toSI: v => v },
-    wavelength: { apiKey: 'wavelength_m', label: 'Wavelength', unit: 'nm', toSI: v => v * 1e-9 },
-    txDiameter: { apiKey: 'tx_diameter_m', label: 'Tx Diameter', unit: 'm', toSI: v => v },
-    rxDiameter: { apiKey: 'rx_diameter_m', label: 'Rx Diameter', unit: 'm', toSI: v => v },
-    distance: { apiKey: 'distance_m', label: 'Distance', unit: 'm', toSI: v => v },
-    implLoss: { apiKey: 'implementation_loss_db', label: 'Implementation Loss', unit: 'dB', toSI: v => v },
-    couplingLoss: { apiKey: 'coupling_loss_db', label: 'Coupling Loss', unit: 'dB', toSI: v => v },
-    txPointing: { apiKey: 'tx_pointing_loss_db', label: 'Tx Pointing Loss', unit: 'dB', toSI: v => v },
-    rxPointing: { apiKey: 'rx_pointing_loss_db', label: 'Rx Pointing Loss', unit: 'dB', toSI: v => v },
+    txPower: { apiKey: 'tx_power_dbm', label: 'Transmitter Power', toSI: v => convertPowerToDBm(v, document.getElementById('txPowerUnit').value) },
+    txEfficiency: { apiKey: 'tx_efficiency', label: 'Tx Efficiency', toSI: v => convertToPercent(v, document.getElementById('txEfficiencyUnit').value) / 100 },
+    rxEfficiency: { apiKey: 'rx_efficiency', label: 'Rx Efficiency', toSI: v => convertToPercent(v, document.getElementById('rxEfficiencyUnit').value) / 100 },
+    rxSensitivity: { apiKey: 'rx_sensitivity_dbm', label: 'Rx Sensitivity', toSI: v => convertPowerToDBm(v, document.getElementById('rxSensitivityUnit').value) },
+    rxLnaGain: { apiKey: 'rx_lna_gain_db', label: 'Rx LNA Gain', toSI: v => convertLossToDb(v, document.getElementById('rxLnaGainUnit').value) },
+    wavelength: { apiKey: 'wavelength_m', label: 'Wavelength', toSI: v => convertToNanometers(v, document.getElementById('wavelengthUnit').value) * 1e-9 },
+    txDiameter: { apiKey: 'tx_diameter_m', label: 'Tx Diameter', toSI: v => convertToMeters(v, document.getElementById('txDiameterUnit').value) },
+    rxDiameter: { apiKey: 'rx_diameter_m', label: 'Rx Diameter', toSI: v => convertToMeters(v, document.getElementById('rxDiameterUnit').value) },
+    distance: { apiKey: 'distance_m', label: 'Distance', toSI: v => convertToMeters(v, document.getElementById('distanceUnit').value) },
+    implLoss: { apiKey: 'implementation_loss_db', label: 'System Loss', toSI: v => convertLossToDb(v, document.getElementById('implLossUnit').value) },
+    couplingLoss: { apiKey: 'coupling_loss_db', label: 'Coupling Loss', toSI: v => convertLossToDb(v, document.getElementById('couplingLossUnit').value) },
+    txPointing: {
+        getApiKey: () => document.getElementById('txModeError').checked ? 'tx_pointing_error_rad' : 'tx_pointing_loss_db',
+        label: 'Tx Pointing Loss',
+        getToSI: () => {
+            if (document.getElementById('txModeError').checked) {
+                return v => convertAngleToRadians(v, document.getElementById('txPointingErrorUnit').value);
+            }
+            return v => convertLossToDb(v, document.getElementById('txPointingLossUnit').value);
+        }
+    },
+    rxPointing: {
+        getApiKey: () => document.getElementById('rxModeError').checked ? 'rx_pointing_error_rad' : 'rx_pointing_loss_db',
+        label: 'Rx Pointing Loss',
+        getToSI: () => {
+            if (document.getElementById('rxModeError').checked) {
+                return v => convertAngleToRadians(v, document.getElementById('rxPointingErrorUnit').value);
+            }
+            return v => convertLossToDb(v, document.getElementById('rxPointingLossUnit').value);
+        }
+    },
 };
 
 // ─── Sweep display label helpers ──────────────────────────────────────────────
@@ -44,8 +64,30 @@ function formatSweepValue(paramKey, siValue) {
         case 'distance': return `${formatMetric(siValue)}`;
         case 'implLoss': return `${siValue.toFixed(2)} dB`;
         case 'couplingLoss': return `${siValue.toFixed(2)} dB`;
-        case 'txPointing': return `${siValue.toFixed(2)} dB`;
-        case 'rxPointing': return `${siValue.toFixed(2)} dB`;
+        case 'txPointing': {
+            let isErrorSweep = document.getElementById('txModeError').checked;
+            let dynamicUnit = isErrorSweep ? document.getElementById('txPointingErrorUnit').value : document.getElementById('txPointingLossUnit').value;
+            if (isErrorSweep) {
+                // siValue is radians. Convert back to displayed unit.
+                let displayVal = siValue;
+                if (dynamicUnit === 'urad') displayVal = siValue * 1e6;
+                if (dynamicUnit === 'nrad') displayVal = siValue * 1e9;
+                return `${displayVal.toFixed(2)} ${dynamicUnit}`;
+            }
+            return `${siValue.toFixed(2)} dB`;
+        }
+        case 'rxPointing': {
+            let isErrorSweep = document.getElementById('rxModeError').checked;
+            let dynamicUnit = isErrorSweep ? document.getElementById('rxPointingErrorUnit').value : document.getElementById('rxPointingLossUnit').value;
+            if (isErrorSweep) {
+                // siValue is radians. Convert back to displayed unit.
+                let displayVal = siValue;
+                if (dynamicUnit === 'urad') displayVal = siValue * 1e6;
+                if (dynamicUnit === 'nrad') displayVal = siValue * 1e9;
+                return `${displayVal.toFixed(2)} ${dynamicUnit}`;
+            }
+            return `${siValue.toFixed(2)} dB`;
+        }
         default: return `${siValue.toFixed(4)}`;
     }
 }
@@ -54,6 +96,18 @@ function formatMetric(metres) {
     if (metres >= 1000) return `${(metres / 1000).toFixed(2)} km`;
     if (metres >= 1) return `${metres.toFixed(2)} m`;
     return `${(metres * 100).toFixed(2)} cm`;
+}
+
+// Helper to extract the numerical portion from formatSweepValue for summing
+function extractNumberFromFormat(formattedString) {
+    const match = formattedString.match(/^-?[\d.]+/);
+    return match ? parseFloat(match[0]) : 0;
+}
+
+// Helper to extract the unit portion from formatSweepValue
+function extractUnitFromFormat(formattedString) {
+    const match = formattedString.match(/[a-zA-Z%]+$/);
+    return match ? match[0] : '';
 }
 
 // ─── Initialization ───────────────────────────────────────────────────────────
@@ -85,6 +139,14 @@ function initSweepControls() {
             }
         });
     });
+
+    // Sync pointing sweep steps
+    const txSteps = document.getElementById('sweep_txPointing_steps');
+    const rxSteps = document.getElementById('sweep_rxPointing_steps');
+    if (txSteps && rxSteps) {
+        txSteps.addEventListener('input', (e) => { rxSteps.value = e.target.value; });
+        rxSteps.addEventListener('input', (e) => { txSteps.value = e.target.value; });
+    }
 }
 
 // ─── API connection ───────────────────────────────────────────────────────────
@@ -101,6 +163,21 @@ async function checkAPIConnection() {
         statusDiv.className = 'api-status offline';
         statusDiv.textContent = '⚠️ Backend API: Offline';
     }
+}
+
+function togglePointingMode(type) {
+    const isError = document.getElementById(`${type}ModeError`).checked;
+    const isSweep = document.getElementById(`sweep_${type}Pointing_sweep`)?.checked || false;
+
+    // Fixed inputs should be completely hidden if sweep is active
+    document.getElementById(`${type}PointingManualInput`).style.display = isSweep ? 'none' : (isError ? 'none' : 'block');
+    document.getElementById(`${type}PointingErrorInput`).style.display = isSweep ? 'none' : (isError ? 'block' : 'none');
+
+    // Unit dropdowns are always visible but we swap which one is shown based on the active mode
+    const lossUnit = document.getElementById(`${type}PointingLossUnit`);
+    const errorUnit = document.getElementById(`${type}PointingErrorUnit`);
+    if (lossUnit) lossUnit.style.display = isError ? 'none' : 'block';
+    if (errorUnit) errorUnit.style.display = isError ? 'block' : 'none';
 }
 
 // ─── Input validation ─────────────────────────────────────────────────────────
@@ -207,6 +284,32 @@ function updateSweepUI(paramKey, isSweep) {
 
     if (fixedEl) fixedEl.style.display = isSweep ? 'none' : '';
     if (sweepEl) sweepEl.classList.toggle('show', isSweep);
+
+    // Special handling for pointing: hide both manual variants when sweeping
+    if (paramKey === 'txPointing') {
+        const type = 'tx';
+        const isError = document.getElementById(`${type}ModeError`).checked;
+        document.getElementById(`${type}PointingManualInput`).style.display = isSweep ? 'none' : (isError ? 'none' : 'block');
+        document.getElementById(`${type}PointingErrorInput`).style.display = isSweep ? 'none' : (isError ? 'block' : 'none');
+
+        // Ensure the correct unit select is visible whether sweeping or fixed
+        const lossUnit = document.getElementById(`${type}PointingLossUnit`);
+        const errorUnit = document.getElementById(`${type}PointingErrorUnit`);
+        if (lossUnit) lossUnit.style.display = isError ? 'none' : 'block';
+        if (errorUnit) errorUnit.style.display = isError ? 'block' : 'none';
+
+    } else if (paramKey === 'rxPointing') {
+        const type = 'rx';
+        const isError = document.getElementById(`${type}ModeError`).checked;
+        document.getElementById(`${type}PointingManualInput`).style.display = isSweep ? 'none' : (isError ? 'none' : 'block');
+        document.getElementById(`${type}PointingErrorInput`).style.display = isSweep ? 'none' : (isError ? 'block' : 'none');
+
+        // Ensure the correct unit select is visible whether sweeping or fixed
+        const lossUnit = document.getElementById(`${type}PointingLossUnit`);
+        const errorUnit = document.getElementById(`${type}PointingErrorUnit`);
+        if (lossUnit) lossUnit.style.display = isError ? 'none' : 'block';
+        if (errorUnit) errorUnit.style.display = isError ? 'block' : 'none';
+    }
 
     // Visual highlight on the card
     const igEl = paramKey === 'txPointing' ? document.getElementById('ig-txPointing')
@@ -338,6 +441,7 @@ function handleCalculateClick() {
 
 async function calculateLinkBudget() {
     hideError(); hideSuccess();
+    document.getElementById('sweepDetailSelector').style.display = 'none';
     const btn = document.getElementById('calculateBtn');
     btn.innerHTML = '<span class="loading"></span> Calculating...';
     btn.disabled = true;
@@ -379,6 +483,7 @@ async function runSweep() {
     // For simplicity when both tx+rx pointing are swept, we do them separately
     // and show the first as the primary sweep (both share the same fixed base).
     const primaryKey = activeSweeps[0];
+    const secondaryKey = activeSweeps.length > 1 ? activeSweeps[1] : null;
 
     const btn = document.getElementById('calculateBtn');
     btn.innerHTML = '<span class="loading"></span> Running Sweep...';
@@ -402,24 +507,52 @@ async function runSweep() {
             return;
         }
 
+        // Determine the dynamic API key and unit converter
+        const apiKey = info.getApiKey ? info.getApiKey() : info.apiKey;
+        const toSI = info.getToSI ? info.getToSI() : info.toSI;
+
         // Convert min/max to SI
-        const siMin = info.toSI(rawMin);
-        const siMax = info.toSI(rawMax);
+        const siMin = toSI(rawMin);
+        const siMax = toSI(rawMax);
 
         // Build the sweep request — skip the swept key in validation
-        if (!validateRequiredInputs(baseInputs, [info.apiKey])) return;
+        if (!validateRequiredInputs(baseInputs, [apiKey])) return;
 
         // Provide a valid dummy value for the swept parameter to pass backend validation
         // The backend sweep loop will overwrite this anyway.
-        baseInputs[info.apiKey] = 1;
+        baseInputs[apiKey] = 1;
 
         const sweepReq = {
             base_inputs: baseInputs,
-            sweep_param: info.apiKey,
+            sweep_param: apiKey,
             sweep_min: siMin,
             sweep_max: siMax,
             sweep_steps: steps
         };
+
+        if (secondaryKey) {
+            const info2 = SWEEP_PARAMS[secondaryKey];
+            const rawMin2 = parseFloat(document.getElementById(`sweep_${secondaryKey}_min`).value);
+            const rawMax2 = parseFloat(document.getElementById(`sweep_${secondaryKey}_max`).value);
+
+            if (isNaN(rawMin2) || isNaN(rawMax2)) {
+                showError('Please fill in valid Min and Max values for the second sweep parameter.');
+                return;
+            }
+            if (rawMax2 <= rawMin2) {
+                showError('Secondary Sweep Max must be greater than Min.');
+                return;
+            }
+
+            const apiKey2 = info2.getApiKey ? info2.getApiKey() : info2.apiKey;
+            const toSI2 = info2.getToSI ? info2.getToSI() : info2.toSI;
+
+            baseInputs[apiKey2] = 1;
+
+            sweepReq.sweep_param2 = apiKey2;
+            sweepReq.sweep_min2 = toSI2(rawMin2);
+            sweepReq.sweep_max2 = toSI2(rawMax2);
+        }
 
         const response = await fetch(`${API_BASE_URL}/api/sweep`, {
             method: 'POST',
@@ -435,7 +568,7 @@ async function runSweep() {
         }
 
         const data = await response.json();
-        renderSweepResults(data, primaryKey, rawMin, rawMax, steps);
+        renderSweepResults(data, activeSweeps, rawMin, rawMax, steps);
 
     } catch (error) {
         showError('Sweep error: ' + error.message);
@@ -446,19 +579,77 @@ async function runSweep() {
 }
 
 // ─── Render sweep results ─────────────────────────────────────────────────────
-function renderSweepResults(data, paramKey, rawMin, rawMax, steps) {
+function renderSweepResults(data, activeSweeps, rawMin, rawMax, steps) {
     const results = data.results;  // array of { sweep_value, outputs }
+    const isDualSweep = Array.isArray(activeSweeps) && activeSweeps.length > 1;
+    const paramKey = Array.isArray(activeSweeps) ? activeSweeps[0] : activeSweeps;
+    const secondaryKey = isDualSweep ? activeSweeps[1] : null;
+
     const info = SWEEP_PARAMS[paramKey];
     const numPts = data.num_points;
 
-    // Update header
-    document.getElementById('sweepParamLabel').textContent = info.label;
-    document.getElementById('sweepSubtitle').textContent =
-        `${numPts} points · ${info.unit}: ${rawMin} → ${rawMax} · Steps: ${steps}`;
-    document.getElementById('sweepTableParamHeader').textContent = `${info.label} (${info.unit})`;
+    const isErrorSweep = info.getApiKey && info.getApiKey().includes('error_rad');
+    let dynamicLabel = isErrorSweep ? (paramKey === 'txPointing' ? 'Tx Pointing Error' : 'Rx Pointing Error') : info.label;
+
+    if (isDualSweep) {
+        dynamicLabel = "Combined Tx + Rx Pointing Error";
+    }
+
+    document.getElementById('sweepParamLabel').textContent = dynamicLabel;
+
+    // Determine dynamic unit for display
+    let dynamicUnit = '';
+    if (info.getApiKey) {
+        if (isErrorSweep) {
+            dynamicUnit = document.getElementById(`${paramKey === 'txPointing' ? 'tx' : 'rx'}PointingErrorUnit`).value;
+        } else {
+            dynamicUnit = document.getElementById(`${paramKey === 'txPointing' ? 'tx' : 'rx'}PointingLossUnit`).value;
+        }
+    } else {
+        dynamicUnit = document.getElementById(`${paramKey}Unit`) ? document.getElementById(`${paramKey}Unit`).value : '';
+    }
+
+    let subtitleText = `${numPts} points · ${dynamicUnit}: ${rawMin} → ${rawMax} · Steps: ${steps}`;
+    if (isDualSweep) {
+        const rawMin2 = document.getElementById(`sweep_${secondaryKey}_min`).value;
+        const rawMax2 = document.getElementById(`sweep_${secondaryKey}_max`).value;
+
+        let dynamicUnit2 = '';
+        const info2 = SWEEP_PARAMS[secondaryKey];
+        const isErrorSweep2 = info2.getApiKey && info2.getApiKey().includes('error_rad');
+        if (info2.getApiKey) {
+            if (isErrorSweep2) {
+                dynamicUnit2 = document.getElementById(`${secondaryKey === 'txPointing' ? 'tx' : 'rx'}PointingErrorUnit`).value;
+            } else {
+                dynamicUnit2 = document.getElementById(`${secondaryKey === 'txPointing' ? 'tx' : 'rx'}PointingLossUnit`).value;
+            }
+        } else {
+            dynamicUnit2 = document.getElementById(`${secondaryKey}Unit`) ? document.getElementById(`${secondaryKey}Unit`).value : '';
+        }
+
+        subtitleText = `${numPts} points · Tx (${dynamicUnit}): ${rawMin} → ${rawMax} | Rx (${dynamicUnit2}): ${rawMin2} → ${rawMax2}`;
+    }
+
+    document.getElementById('sweepSubtitle').textContent = subtitleText;
+    document.getElementById('sweepTableParamHeader').textContent = isDualSweep ? `Total Ptr Error (${dynamicUnit})` : `${dynamicLabel} (${dynamicUnit})`;
 
     // ── Chart ────────────────────────────────────────────────────────────────
-    const labels = results.map(r => formatSweepValue(paramKey, r.sweep_value));
+    const labels = results.map((r, i) => {
+        const primaryFormatted = formatSweepValue(paramKey, r.sweep_value);
+        if (isDualSweep && r.outputs && POINTING_KEYS.has(paramKey) && POINTING_KEYS.has(secondaryKey)) {
+            const info2 = SWEEP_PARAMS[secondaryKey];
+            const apiKey2 = info2.getApiKey ? info2.getApiKey() : info2.apiKey;
+            const secondarySiValue = r.outputs[apiKey2];
+            if (secondarySiValue !== undefined) {
+                const secondaryFormatted = formatSweepValue(secondaryKey, secondarySiValue);
+                const val1 = extractNumberFromFormat(primaryFormatted);
+                const val2 = extractNumberFromFormat(secondaryFormatted);
+                const unit = extractUnitFromFormat(primaryFormatted);
+                return `${(val1 + val2).toFixed(2)} ${unit}`;
+            }
+        }
+        return primaryFormatted;
+    });
     const lmData = results.map(r => r.outputs.link_margin_db !== null ? r.outputs.link_margin_db : null);
     const rxData = results.map(r => r.outputs.received_power_lna_dbm);
 
@@ -515,7 +706,7 @@ function renderSweepResults(data, paramKey, rawMin, rawMax, steps) {
                 x: {
                     ticks: { color: '#8899aa', font: { size: 10 }, maxTicksLimit: 20 },
                     grid: { color: 'rgba(255,255,255,0.06)' },
-                    title: { display: true, text: info.label, color: '#8899aa' }
+                    title: { display: true, text: document.getElementById('sweepTableParamHeader').textContent, color: '#8899aa' }
                 },
                 yLM: {
                     type: 'linear',
@@ -547,7 +738,20 @@ function renderSweepResults(data, paramKey, rawMin, rawMax, steps) {
         const viableText = viable === true ? '✓ Yes' : viable === false ? '✗ No' : '—';
 
         // Format sweep value for display (in original unit, not SI)
-        const displayVal = formatSweepValue(paramKey, r.sweep_value);
+        let displayVal = formatSweepValue(paramKey, r.sweep_value);
+
+        if (isDualSweep && r.outputs && POINTING_KEYS.has(paramKey) && POINTING_KEYS.has(secondaryKey)) {
+            const info2 = SWEEP_PARAMS[secondaryKey];
+            const apiKey2 = info2.getApiKey ? info2.getApiKey() : info2.apiKey;
+            const secondarySiValue = r.outputs[apiKey2];
+            if (secondarySiValue !== undefined) {
+                const secondaryFormatted = formatSweepValue(secondaryKey, secondarySiValue);
+                const val1 = extractNumberFromFormat(displayVal);
+                const val2 = extractNumberFromFormat(secondaryFormatted);
+                const unit = extractUnitFromFormat(displayVal);
+                displayVal = `${(val1 + val2).toFixed(2)} ${unit}`;
+            }
+        }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -561,8 +765,55 @@ function renderSweepResults(data, paramKey, rawMin, rawMax, steps) {
     });
 
     document.getElementById('sweepResults').classList.add('show');
+    document.getElementById('saveBtn').disabled = false;
+    document.getElementById('pdfBtn').disabled = false;
+
+    // Setup the detailed selector
+    currentSweepResults = results;
+    currentSweepParamKey = paramKey;
+    const select = document.getElementById('sweepPointSelect');
+    if (select) {
+        select.innerHTML = '';
+        results.forEach((r, idx) => {
+            const opt = document.createElement('option');
+            opt.value = idx;
+
+            let displayVal = formatSweepValue(paramKey, r.sweep_value);
+            if (isDualSweep && r.outputs && POINTING_KEYS.has(paramKey) && POINTING_KEYS.has(secondaryKey)) {
+                const info2 = SWEEP_PARAMS[secondaryKey];
+                const apiKey2 = info2.getApiKey ? info2.getApiKey() : info2.apiKey;
+                const secondarySiValue = r.outputs[apiKey2];
+                if (secondarySiValue !== undefined) {
+                    const secondaryFormatted = formatSweepValue(secondaryKey, secondarySiValue);
+                    const val1 = extractNumberFromFormat(displayVal);
+                    const val2 = extractNumberFromFormat(secondaryFormatted);
+                    const unit = extractUnitFromFormat(displayVal);
+                    displayVal = `${(val1 + val2).toFixed(2)} ${unit}`;
+                }
+            }
+            opt.textContent = displayVal;
+            select.appendChild(opt);
+        });
+        document.getElementById('sweepDetailSelector').style.display = 'block';
+        select.value = "0";
+        handleSweepPointSelect();
+    }
+
     document.getElementById('sweepResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+function handleSweepPointSelect() {
+    const idx = document.getElementById('sweepPointSelect').value;
+    if (currentSweepResults && currentSweepResults[idx]) {
+        // Also update the global calculation data so the PDF knows what point we just selected
+        currentCalculationData = {
+            inputs: currentSweepResults[idx].outputs.inputs || {},
+            outputs: currentSweepResults[idx].outputs
+        };
+        displayResults(currentSweepResults[idx].outputs);
+    }
+}
+
 
 // ─── Display single-point results ────────────────────────────────────────────
 function displayResults(outputs) {
@@ -613,6 +864,10 @@ function displayResults(outputs) {
     document.getElementById('resultRxDivergence').textContent =
         `${outputs.rx_beam_divergence_deg.toFixed(6)}°  (${outputs.rx_beam_divergence_rad.toFixed(6)} rad)`;
     document.getElementById('resultPathLoss').textContent = `${outputs.path_loss_db.toFixed(2)} dB`;
+    const elTxPoint = document.getElementById('resultTxPointingLoss'); if (elTxPoint) elTxPoint.textContent = `${outputs.tx_pointing_loss_db.toFixed(2)} dB`;
+    const elRxPoint = document.getElementById('resultRxPointingLoss'); if (elRxPoint) elRxPoint.textContent = `${outputs.rx_pointing_loss_db.toFixed(2)} dB`;
+    const elSys = document.getElementById('resultSystemLoss'); if (elSys) elSys.textContent = `${outputs.impl_loss_db.toFixed(2)} dB`;
+    const elCpl = document.getElementById('resultCouplingLoss'); if (elCpl) elCpl.textContent = `${outputs.coupling_loss_db.toFixed(2)} dB`;
     document.getElementById('resultTotalLoss').textContent = `${outputs.total_loss_db.toFixed(2)} dB`;
 
     document.getElementById('resultRxPowerNoLna').textContent =
@@ -675,9 +930,18 @@ async function exportToPDF() {
     pdfBtn.innerHTML = '<span class="loading"></span> Generating PDF...';
     pdfBtn.disabled = true;
     try {
+        let payload = { ...currentCalculationData };
+        if (document.getElementById('sweepResults').classList.contains('show') && currentSweepResults && currentSweepResults.length > 0) {
+            payload.sweep_results = currentSweepResults;
+            payload.sweep_param_label = document.getElementById('sweepTableParamHeader').textContent;
+            if (sweepChartInstance) {
+                payload.sweep_chart_base64 = sweepChartInstance.toBase64Image();
+            }
+        }
+
         const response = await fetch(`${API_BASE_URL}/api/generate-pdf`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentCalculationData)
+            body: JSON.stringify(payload)
         });
         if (!response.ok) throw new Error('Failed to generate PDF');
         const data = await response.json();
@@ -715,6 +979,7 @@ function resetForm() {
 
     document.getElementById('results').classList.remove('show');
     document.getElementById('sweepResults').classList.remove('show');
+    document.getElementById('sweepDetailSelector').style.display = 'none';
     document.getElementById('saveBtn').disabled = true;
     document.getElementById('pdfBtn').disabled = true;
     document.getElementById('sweepBtn').disabled = true;

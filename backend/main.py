@@ -15,6 +15,8 @@ import json
 import os
 import math
 import tempfile
+import base64
+import io
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -296,6 +298,18 @@ class SaveCalculationRequest(BaseModel):
     notes:            Optional[str] = Field(None, max_length=500)
 
 
+class SweepRequest(BaseModel):
+    base_inputs:  LinkBudgetInput
+    sweep_param:  str   = Field(..., description="Field name to sweep (e.g. 'distance_m')")
+    sweep_min:    float = Field(..., description="Minimum value of sweep (SI units as expected by API)")
+    sweep_max:    float = Field(..., description="Maximum value of sweep (SI units as expected by API)")
+    sweep_steps:  int   = Field(..., ge=1, description="Number of intervals (num_points = steps + 1)")
+    
+    sweep_param2: Optional[str] = Field(None, description="Optional second parameter to sweep simultaneously")
+    sweep_min2:   Optional[float] = Field(None, description="Minimum value for second parameter")
+    sweep_max2:   Optional[float] = Field(None, description="Maximum value for second parameter")
+
+
 # ============= API ENDPOINTS =============
 
 @app.get("/health")
@@ -326,6 +340,70 @@ async def calculate_link_budget_endpoint(inputs: LinkBudgetInput):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Calculation error: {str(e)}")
+
+
+@app.post("/api/sweep")
+async def sweep_link_budget_endpoint(request: SweepRequest):
+    """Run a parameter sweep: vary one parameter from sweep_min to sweep_max
+    in sweep_steps intervals (sweep_steps+1 total points), return all results."""
+    try:
+        with open("last_sweep_req.json", "w") as f:
+            json.dump(request.dict(), f, indent=2)
+            
+        num_points = request.sweep_steps + 1
+        step_size  = (request.sweep_max - request.sweep_min) / request.sweep_steps if request.sweep_steps > 0 else 0
+        sweep_values = [request.sweep_min + i * step_size for i in range(num_points)]
+        
+        sweep_values2 = None
+        if request.sweep_param2 and request.sweep_min2 is not None and request.sweep_max2 is not None:
+            step_size2 = (request.sweep_max2 - request.sweep_min2) / request.sweep_steps if request.sweep_steps > 0 else 0
+            sweep_values2 = [request.sweep_min2 + i * step_size2 for i in range(num_points)]
+
+        # Validate the sweep param exists on the model
+        base_dict = request.base_inputs.dict()
+        if request.sweep_param not in base_dict:
+            raise HTTPException(status_code=400, detail=f"Unknown sweep parameter: {request.sweep_param}")
+            
+        if request.sweep_param2 and request.sweep_param2 not in base_dict:
+            raise HTTPException(status_code=400, detail=f"Unknown sweep parameter 2: {request.sweep_param2}")
+
+        sweep_results = []
+        for i, val in enumerate(sweep_values):
+            params = dict(base_dict)   # fresh copy each iteration
+            params[request.sweep_param] = val
+            
+            if sweep_values2:
+                params[request.sweep_param2] = sweep_values2[i]
+
+            is_valid, error_msg = validate_inputs(params)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=f"Invalid params at sweep value {val}: {error_msg}")
+
+            raw = calculate_link_budget(params)
+            flat = flatten_results(raw)
+
+            sweep_results.append({
+                "sweep_value": val,
+                "outputs":     flat
+            })
+
+        return {
+            "success":     True,
+            "sweep_param": request.sweep_param,
+            "sweep_min":   request.sweep_min,
+            "sweep_max":   request.sweep_max,
+            "sweep_steps": request.sweep_steps,
+            "num_points":  num_points,
+            "results":     sweep_results,
+            "timestamp":   datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sweep error: {str(e)}")
 
 
 @app.post("/api/save")
@@ -409,7 +487,7 @@ async def delete_calculation(filename: str):
 # ============= PDF GENERATION =============
 
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -480,7 +558,7 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
         ['Transmitter Efficiency', f"{inputs.get('tx_efficiency', 0) * 100 if inputs.get('tx_efficiency', 0) <= 1 else inputs.get('tx_efficiency', 0):.2f}", '%'],
         ['Receiver Efficiency', f"{inputs.get('rx_efficiency', 0) * 100 if inputs.get('rx_efficiency', 0) <= 1 else inputs.get('rx_efficiency', 0):.2f}", '%'],
         ['Receiver Sensitivity', f"{inputs.get('rx_sensitivity_dbm', outputs.get('rx_sensitivity_dbm', 0)):.2f} dBm  ({outputs.get('rx_sensitivity_mw', 0):.9f} mW)", ''],
-        ['Receiver Optical Low Noise Amplifier Gain Value', f"{lna_gain:.2f}", 'dB'],
+        ['Receiver Optical LNA Gain', f"{lna_gain:.2f}", 'dB'],
         ['Optical Wavelength', f"{inputs.get('wavelength_m', 0) * 1e9:.2f}", 'nm'],
         ['Transmitter Diameter', f"{inputs.get('tx_diameter_m', 0):.3f}", 'm'],
         ['Receiver Diameter', f"{inputs.get('rx_diameter_m', 0):.3f}", 'm'],
@@ -641,6 +719,73 @@ def generate_pdf_report(calculation_data: dict, output_path: str):
         "Actual performance may vary based on environmental factors."
     )
     story.append(Paragraph(notes_text, normal_style))
+
+    sweep_results = calculation_data.get('sweep_results')
+    if sweep_results:
+        story.append(PageBreak())
+        story.append(Paragraph("Parameter Sweep Analysis", heading_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        sweep_param_label = calculation_data.get('sweep_param_label', 'Sweep Parameter')
+        sweep_chart_base64 = calculation_data.get('sweep_chart_base64')
+        
+        if sweep_chart_base64:
+            try:
+                # Remove data:image/png;base64, prefix if it exists
+                if ',' in sweep_chart_base64:
+                    sweep_chart_base64 = sweep_chart_base64.split(',')[1]
+                
+                img_data = base64.b64decode(sweep_chart_base64)
+                img = Image(io.BytesIO(img_data))
+                
+                # Scale image to fit page width (letter width is 8.5 inches, margins are 0.75 each -> 7 inches available)
+                avail_width = 7 * inch
+                aspect = img.drawHeight / img.drawWidth
+                img.drawWidth = avail_width
+                img.drawHeight = avail_width * aspect
+                
+                story.append(img)
+                story.append(Spacer(1, 0.4*inch))
+            except Exception as e:
+                print(f"Failed to decode chart image: {e}")
+                
+        # Generate Table
+        story.append(Paragraph("Sweep Data Table", subheading_style))
+        story.append(Spacer(1, 0.1*inch))
+        
+        t_data = [[sweep_param_label, "Link Margin (dB)", "Rx Power LNA (dBm)", "Path Loss (dB)", "Viable?"]]
+        for r in sweep_results:
+            val = r.get('sweep_value', 0)
+            outputs_r = r.get('outputs', {})
+            lm = outputs_r.get('link_margin_db')
+            lm_str = f"{lm:.2f}" if lm is not None else "—"
+            rx_pwr = f"{outputs_r.get('received_power_lna_dbm', 0):.2f}"
+            path_loss = f"{outputs_r.get('path_loss_db', 0):.2f}"
+            viable = outputs_r.get('link_viable')
+            viable_str = "Yes" if viable is True else "No" if viable is False else "—"
+            
+            if val == 0:
+                val_str = "0"
+            elif abs(val) < 1e-3 or abs(val) > 1e4:
+                val_str = f"{val:.4e}"
+            else:
+                val_str = f"{val:.4f}"
+                
+            t_data.append([val_str, lm_str, rx_pwr, path_loss, viable_str])
+            
+        t_table = Table(t_data, colWidths=[1.7*inch, 1.2*inch, 1.5*inch, 1.3*inch, 1.0*inch])
+        t_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#007bff')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0,0), (-1,0), 10),
+            ('FONTSIZE', (0,1), (-1,-1), 9),
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f8f9fa')]),
+        ]))
+        story.append(t_table)
+
     doc.build(story, canvasmaker=WatermarkCanvas)
     return output_path
 

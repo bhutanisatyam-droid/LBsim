@@ -715,9 +715,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-txPower">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (dBm)</span><input type="number" id="sweep_txPower_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_txPower_min"
                                 placeholder="-10"></div>
-                        <div class="sweep-field"><span>Max (dBm)</span><input type="number" id="sweep_txPower_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_txPower_max"
                                 placeholder="30"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txPower_steps"
                                 placeholder="10" min="1"></div>
@@ -748,9 +748,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-txEfficiency">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (%)</span><input type="number" id="sweep_txEfficiency_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_txEfficiency_min"
                                 placeholder="50"></div>
-                        <div class="sweep-field"><span>Max (%)</span><input type="number" id="sweep_txEfficiency_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_txEfficiency_max"
                                 placeholder="100"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txEfficiency_steps"
                                 placeholder="10" min="1"></div>
@@ -781,9 +781,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-rxEfficiency">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (%)</span><input type="number" id="sweep_rxEfficiency_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_rxEfficiency_min"
                                 placeholder="50"></div>
-                        <div class="sweep-field"><span>Max (%)</span><input type="number" id="sweep_rxEfficiency_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_rxEfficiency_max"
                                 placeholder="100"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxEfficiency_steps"
                                 placeholder="10" min="1"></div>
@@ -815,9 +815,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-rxSensitivity">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (dBm)</span><input type="number" id="sweep_rxSensitivity_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_rxSensitivity_min"
                                 placeholder="-80"></div>
-                        <div class="sweep-field"><span>Max (dBm)</span><input type="number" id="sweep_rxSensitivity_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_rxSensitivity_max"
                                 placeholder="-40"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxSensitivity_steps"
                                 placeholder="10" min="1"></div>
@@ -826,36 +826,6 @@
                 <div class="input-error" id="rxSensitivity-error"></div>
             </div>
 
-            <!-- RX LNA GAIN -->
-            <div class="input-group required" id="ig-rxLnaGain">
-                <label for="rxLnaGain">Receiver Optical Low Noise Amplifier (LNA) Gain</label>
-                <div class="sweep-toggle-row">
-                    <div class="sweep-pill">
-                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_fixed" value="fixed" checked>
-                        <label for="sweep_rxLnaGain_fixed">Fixed</label>
-                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_sweep" value="sweep">
-                        <label for="sweep_rxLnaGain_sweep">Sweep</label>
-                    </div>
-                    <select id="rxLnaGainUnit" class="unit-select-sm">
-                        <option value="dB">dB</option>
-                    </select>
-                </div>
-                <div id="fixed-rxLnaGain">
-                    <input type="text" inputmode="decimal" id="rxLnaGain" class="value-input"
-                        placeholder="0 (enter 0 if no LNA)">
-                </div>
-                <div class="sweep-inputs" id="sweep-rxLnaGain">
-                    <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_rxLnaGain_min"
-                                placeholder="0"></div>
-                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_rxLnaGain_max"
-                                placeholder="20"></div>
-                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxLnaGain_steps"
-                                placeholder="10" min="1"></div>
-                    </div>
-                </div>
-                <div class="input-error" id="rxLnaGain-error"></div>
-            </div>
 
             <!-- WAVELENGTH -->
             <div class="input-group required" id="ig-wavelength">
@@ -879,9 +849,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-wavelength">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (nm)</span><input type="number" id="sweep_wavelength_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_wavelength_min"
                                 placeholder="800"></div>
-                        <div class="sweep-field"><span>Max (nm)</span><input type="number" id="sweep_wavelength_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_wavelength_max"
                                 placeholder="1600"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_wavelength_steps"
                                 placeholder="10" min="1"></div>
@@ -912,9 +882,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-txDiameter">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_txDiameter_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_txDiameter_min"
                                 placeholder="0.05"></div>
-                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_txDiameter_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_txDiameter_max"
                                 placeholder="0.5"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txDiameter_steps"
                                 placeholder="10" min="1"></div>
@@ -945,9 +915,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-rxDiameter">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_rxDiameter_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_rxDiameter_min"
                                 placeholder="0.05"></div>
-                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_rxDiameter_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_rxDiameter_max"
                                 placeholder="0.5"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxDiameter_steps"
                                 placeholder="10" min="1"></div>
@@ -977,9 +947,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-distance">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_distance_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_distance_min"
                                 placeholder="100"></div>
-                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_distance_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_distance_max"
                                 placeholder="1000"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_distance_steps"
                                 placeholder="10" min="1"></div>
@@ -988,9 +958,41 @@
                 <div class="input-error" id="distance-error"></div>
             </div>
 
-            <!-- IMPLEMENTATION LOSS -->
+            <!-- RX LNA GAIN -->
+            <div class="input-group required" id="ig-rxLnaGain">
+                <label for="rxLnaGain">Receiver Optical Low Noise Amplifier (LNA) Gain</label>
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_fixed" value="fixed" checked>
+                        <label for="sweep_rxLnaGain_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_sweep" value="sweep">
+                        <label for="sweep_rxLnaGain_sweep">Sweep</label>
+                    </div>
+                    <select id="rxLnaGainUnit" class="unit-select-sm">
+                        <option value="dB">dB</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                </div>
+                <div id="fixed-rxLnaGain">
+                    <input type="text" inputmode="decimal" id="rxLnaGain" class="value-input"
+                        placeholder="0 (enter 0 if no LNA)">
+                </div>
+                <div class="sweep-inputs" id="sweep-rxLnaGain">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_rxLnaGain_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_rxLnaGain_max"
+                                placeholder="20"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxLnaGain_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
+                <div class="input-error" id="rxLnaGain-error"></div>
+            </div>
+
+            <!-- SYSTEM LOSS -->
             <div class="input-group" id="ig-implLoss">
-                <label for="implLoss">Implementation Loss (Optional)</label>
+                <label for="implLoss">System Loss (Optional)</label>
                 <div class="sweep-toggle-row">
                     <div class="sweep-pill">
                         <input type="radio" name="sweep_implLoss" id="sweep_implLoss_fixed" value="fixed" checked>
@@ -1008,9 +1010,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-implLoss">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_implLoss_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_implLoss_min"
                                 placeholder="0"></div>
-                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_implLoss_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_implLoss_max"
                                 placeholder="10"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_implLoss_steps"
                                 placeholder="10" min="1"></div>
@@ -1040,9 +1042,9 @@
                 </div>
                 <div class="sweep-inputs" id="sweep-couplingLoss">
                     <div class="sweep-inputs-row">
-                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_couplingLoss_min"
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_couplingLoss_min"
                                 placeholder="0"></div>
-                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_couplingLoss_max"
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_couplingLoss_max"
                                 placeholder="10"></div>
                         <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_couplingLoss_steps"
                                 placeholder="10" min="1"></div>
@@ -1067,35 +1069,35 @@
                         <input type="radio" name="sweep_txPointing" id="sweep_txPointing_sweep" value="sweep">
                         <label for="sweep_txPointing_sweep">Sweep</label>
                     </div>
+                    <select id="txPointingLossUnit" class="unit-select-sm" style="display:block;">
+                        <option value="dB">dB</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                    <select id="txPointingErrorUnit" class="unit-select-sm" style="display:none;">
+                        <option value="urad">μrad</option>
+                        <option value="rad">rad</option>
+                        <option value="nrad">nrad</option>
+                    </select>
+                </div>
+                <div class="sweep-inputs" id="sweep-txPointing">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_txPointing_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_txPointing_max"
+                                placeholder="10"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txPointing_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div id="txPointingManualInput">
                     <div id="fixed-txPointing" class="input-row">
                         <input type="text" inputmode="decimal" id="txPointingLoss" class="value-input" placeholder="0">
-                        <select id="txPointingLossUnit" class="unit-select">
-                            <option value="dB">dB</option>
-                            <option value="linear">Linear</option>
-                        </select>
-                    </div>
-                    <div class="sweep-inputs" id="sweep-txPointing">
-                        <div class="sweep-inputs-row">
-                            <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_txPointing_min"
-                                    placeholder="0"></div>
-                            <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_txPointing_max"
-                                    placeholder="10"></div>
-                            <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txPointing_steps"
-                                    placeholder="10" min="1"></div>
-                        </div>
                     </div>
                 </div>
                 <div id="txPointingErrorInput" style="display:none;">
                     <div class="input-row">
                         <input type="text" inputmode="decimal" id="txPointingError" class="value-input"
                             placeholder="Enter error">
-                        <select id="txPointingErrorUnit" class="unit-select">
-                            <option value="urad">μrad</option>
-                            <option value="rad">rad</option>
-                            <option value="nrad">nrad</option>
-                        </select>
                     </div>
                     <div style="font-size:0.8em;color:#aaa;margin-top:5px;">Calculated Loss: L = exp(-G_tx · θ²)</div>
                 </div>
@@ -1118,35 +1120,35 @@
                         <input type="radio" name="sweep_rxPointing" id="sweep_rxPointing_sweep" value="sweep">
                         <label for="sweep_rxPointing_sweep">Sweep</label>
                     </div>
+                    <select id="rxPointingLossUnit" class="unit-select-sm" style="display:block;">
+                        <option value="dB">dB</option>
+                        <option value="linear">Linear</option>
+                    </select>
+                    <select id="rxPointingErrorUnit" class="unit-select-sm" style="display:none;">
+                        <option value="urad">μrad</option>
+                        <option value="rad">rad</option>
+                        <option value="nrad">nrad</option>
+                    </select>
+                </div>
+                <div class="sweep-inputs" id="sweep-rxPointing">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min</span><input type="number" id="sweep_rxPointing_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max</span><input type="number" id="sweep_rxPointing_max"
+                                placeholder="10"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxPointing_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div id="rxPointingManualInput">
                     <div id="fixed-rxPointing" class="input-row">
                         <input type="text" inputmode="decimal" id="rxPointingLoss" class="value-input" placeholder="0">
-                        <select id="rxPointingLossUnit" class="unit-select">
-                            <option value="dB">dB</option>
-                            <option value="linear">Linear</option>
-                        </select>
-                    </div>
-                    <div class="sweep-inputs" id="sweep-rxPointing">
-                        <div class="sweep-inputs-row">
-                            <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_rxPointing_min"
-                                    placeholder="0"></div>
-                            <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_rxPointing_max"
-                                    placeholder="10"></div>
-                            <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxPointing_steps"
-                                    placeholder="10" min="1"></div>
-                        </div>
                     </div>
                 </div>
                 <div id="rxPointingErrorInput" style="display:none;">
                     <div class="input-row">
                         <input type="text" inputmode="decimal" id="rxPointingError" class="value-input"
                             placeholder="Enter error">
-                        <select id="rxPointingErrorUnit" class="unit-select">
-                            <option value="urad">μrad</option>
-                            <option value="rad">rad</option>
-                            <option value="nrad">nrad</option>
-                        </select>
                     </div>
                     <div style="font-size:0.8em;color:#aaa;margin-top:5px;">Calculated Loss: L = exp(-G_rx · θ²)</div>
                 </div>
@@ -1164,6 +1166,16 @@
 
         <div class="error" id="errorMsg"></div>
         <div class="success" id="successMsg"></div>
+
+        <!-- SWEEP POINT SELECTOR -->
+        <div id="sweepDetailSelector" style="display:none; text-align:center; margin-top: 30px; margin-bottom: 20px;">
+            <label for="sweepPointSelect"
+                style="color:#00c8ff; font-weight:600; font-size: 1.1em; margin-right:15px;">View Detailed Results For
+                Step:</label>
+            <select id="sweepPointSelect" onchange="handleSweepPointSelect()"
+                style="padding: 10px 15px; border-radius: 8px; background: rgba(0,0,0,0.6); color: #fff; border: 2px solid rgba(0,200,255,0.4); outline: none; font-size: 1.05em; cursor: pointer;">
+            </select>
+        </div>
 
         <!-- SINGLE-POINT RESULTS -->
         <div class="results" id="results">
@@ -1233,8 +1245,24 @@
                         <div class="value" id="resultPathLoss">-</div>
                     </div>
                     <div class="result-item">
-                        <div class="label">Total Losses</div>
-                        <div class="value" id="resultTotalLoss">-</div>
+                        <div class="label">Tx Pointing Loss</div>
+                        <div class="value" id="resultTxPointingLoss">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Rx Pointing Loss</div>
+                        <div class="value" id="resultRxPointingLoss">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">System Loss</div>
+                        <div class="value" id="resultSystemLoss">-</div>
+                    </div>
+                    <div class="result-item">
+                        <div class="label">Coupling Loss</div>
+                        <div class="value" id="resultCouplingLoss">-</div>
+                    </div>
+                    <div class="result-item" style="border-top: 1px solid rgba(0, 123, 255, 0.2); padding-top: 10px;">
+                        <div class="label" style="font-weight:bold; color:#00d8ff;">Total Losses</div>
+                        <div class="value" id="resultTotalLoss" style="font-weight:bold; color:#00d8ff;">-</div>
                     </div>
                 </div>
             </div>
@@ -1286,7 +1314,7 @@
 
     </div><!-- /container -->
 
-    <script src="app_v2.js?v=4"></script>
+    <script src="app_v2.js?v=14"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function (registrations) {
