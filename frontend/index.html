@@ -5,13 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Optical Link Budget Calculator</title>
-
-    <!-- PWA Meta Tags -->
     <meta name="description" content="Professional optical link budget calculator with PDF export">
     <meta name="theme-color" content="#007bff">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
-
+    <!-- Chart.js for sweep visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -72,6 +71,7 @@
             color: #dc3545;
         }
 
+        /* ── Form grid ── */
         .form-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
@@ -93,17 +93,10 @@
             transform: translateY(-2px);
         }
 
-        .lna-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #00b4ff, #0056b3);
-            color: #fff;
-            font-size: 0.7em;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 10px;
-            margin-left: 8px;
-            vertical-align: middle;
-            letter-spacing: 0.5px;
+        .input-group.sweep-active {
+            border-color: rgba(0, 210, 255, 0.6);
+            background: rgba(0, 210, 255, 0.05);
+            box-shadow: 0 0 18px rgba(0, 210, 255, 0.15);
         }
 
         .input-group.required label::after {
@@ -113,12 +106,98 @@
 
         .input-group label {
             display: block;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             color: #007bff;
             font-weight: 600;
             font-size: 0.95em;
         }
 
+        /* ── Sweep pill toggle ── */
+        .sweep-toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .sweep-pill {
+            display: inline-flex;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 2px;
+            border: 1px solid rgba(0, 123, 255, 0.3);
+        }
+
+        .sweep-pill input[type="radio"] {
+            display: none;
+        }
+
+        .sweep-pill label {
+            padding: 5px 14px;
+            border-radius: 18px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: 500;
+            color: #8899aa;
+            transition: all 0.3s ease;
+            user-select: none;
+            white-space: nowrap;
+            margin-bottom: 0;
+        }
+
+        .sweep-pill input[type="radio"]:checked+label {
+            background: linear-gradient(135deg, #00c8ff, #0068ff);
+            color: #fff;
+        }
+
+        /* ── Sweep min/max/steps ── */
+        .sweep-inputs {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .sweep-inputs.show {
+            display: flex;
+        }
+
+        .sweep-inputs-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sweep-field {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .sweep-field span {
+            font-size: 0.72em;
+            color: #8899aa;
+            font-weight: 500;
+        }
+
+        .sweep-field input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid rgba(0, 200, 255, 0.4);
+            border-radius: 7px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #00d8ff;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .sweep-field input:focus {
+            outline: none;
+            border-color: #00c8ff;
+            box-shadow: 0 0 10px rgba(0, 200, 255, 0.25);
+        }
+
+        /* ── Regular inputs ── */
         .input-row {
             display: flex;
             gap: 10px;
@@ -130,7 +209,6 @@
             font-size: 0.85em;
             margin-top: 5px;
             display: none;
-            animation: fadeIn 0.3s ease;
         }
 
         .input-error.show {
@@ -155,14 +233,6 @@
             color: #fff;
             font-size: 16px;
             transition: all 0.3s ease;
-            -webkit-appearance: none;
-            -moz-appearance: textfield;
-        }
-
-        .input-group input::-webkit-outer-spin-button,
-        .input-group input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
         }
 
         .input-group input:focus {
@@ -180,13 +250,6 @@
             color: #fff;
             font-size: 16px;
             cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .input-group select:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 15px rgba(0, 123, 255, 0.3);
         }
 
         .input-group select option {
@@ -194,6 +257,7 @@
             color: #fff;
         }
 
+        /* ── Buttons ── */
         .button-group {
             display: flex;
             gap: 20px;
@@ -212,7 +276,6 @@
             transition: all 0.3s ease;
             text-transform: uppercase;
             letter-spacing: 1px;
-            position: relative;
         }
 
         button:disabled {
@@ -228,40 +291,43 @@
 
         .calculate-btn:hover:not(:disabled) {
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(0, 123, 255, 0.6);
+        }
+
+        .sweep-btn {
+            background: linear-gradient(135deg, #00c8ff, #0068c8);
+            color: white;
+            box-shadow: 0 5px 20px rgba(0, 200, 255, 0.4);
+        }
+
+        .sweep-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
         }
 
         .reset-btn {
             background: linear-gradient(135deg, #343a40, #1a1d20);
             color: white;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
         }
 
         .reset-btn:hover:not(:disabled) {
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
         }
 
         .save-btn {
             background: linear-gradient(135deg, #28a745, #1e7e34);
             color: white;
-            box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4);
         }
 
         .save-btn:hover:not(:disabled) {
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(40, 167, 69, 0.6);
         }
 
         .pdf-btn {
             background: linear-gradient(135deg, #dc3545, #c82333);
             color: white;
-            box-shadow: 0 5px 20px rgba(220, 53, 69, 0.4);
         }
 
         .pdf-btn:hover:not(:disabled) {
             transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(220, 53, 69, 0.6);
         }
 
         .loading {
@@ -280,6 +346,7 @@
             }
         }
 
+        /* ── Results panels ── */
         .results {
             background: rgba(0, 123, 255, 0.05);
             border: 2px solid rgba(0, 123, 255, 0.3);
@@ -343,12 +410,6 @@
             background: rgba(40, 167, 69, 0.1);
         }
 
-        /* NEW: LNA amplified power result style */
-        .result-item.highlight-lna {
-            border-left: 4px solid #00b4ff;
-            background: rgba(0, 180, 255, 0.1);
-        }
-
         .result-item.warning {
             border-left: 4px solid #dc3545;
             background: rgba(220, 53, 69, 0.1);
@@ -362,7 +423,7 @@
 
         .result-item .value {
             color: #007bff;
-            font-size: 1.5em;
+            font-size: 1.3em;
             font-weight: 700;
         }
 
@@ -370,15 +431,10 @@
             color: #28a745;
         }
 
-        .result-item.highlight-lna .value {
-            color: #00b4ff;
-        }
-
         .result-item.warning .value {
             color: #dc3545;
         }
 
-        /* ── Link Margin box ─────────────────────────────────────────────── */
         .link-margin-box {
             background: linear-gradient(135deg, rgba(40, 167, 69, 0.2), rgba(40, 167, 69, 0.1));
             border: 3px solid #28a745;
@@ -420,40 +476,16 @@
             color: #dc3545;
         }
 
-        /* ── Power rows inside margin box ────────────────────────────────── */
-        .link-margin-power-details {
-            margin-top: 18px;
-            font-size: 0.88em;
+        .lm-power-details {
+            margin-top: 15px;
+            font-size: 0.9em;
             color: #b0b0b0;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            align-items: center;
+            text-align: left;
+            display: inline-block;
         }
 
-        .link-margin-power-details .prow {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .prow-label {
-            color: #8899aa;
-            min-width: 200px;
-            text-align: right;
-        }
-
-        .prow-value {
-            color: #ddeeff;
-            font-weight: 600;
-        }
-
-        .prow-value.lna-color {
-            color: #00d4ff;
-        }
-
-        .prow-value.plain-color {
-            color: #aaccee;
+        .lm-power-details div {
+            margin: 6px 0;
         }
 
         .error {
@@ -469,7 +501,6 @@
 
         .error.show {
             display: block;
-            animation: fadeIn 0.5s ease;
         }
 
         .success {
@@ -485,10 +516,9 @@
 
         .success.show {
             display: block;
-            animation: fadeIn 0.5s ease;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width:768px) {
             .container {
                 padding: 20px;
             }
@@ -508,13 +538,9 @@
             button {
                 width: 100%;
             }
-
-            .prow-label {
-                min-width: 140px;
-            }
         }
 
-        /* Toggle Pill Buttons */
+        /* ── Pointing toggle group ── */
         .toggle-group {
             display: inline-flex;
             background: rgba(0, 0, 0, 0.5);
@@ -540,14 +566,122 @@
             white-space: nowrap;
         }
 
-        .toggle-group label:hover {
-            color: #aabbcc;
-        }
-
         .toggle-group input[type="radio"]:checked+label {
             background: linear-gradient(135deg, #007bff, #0056b3);
             color: #fff;
-            box-shadow: 0 2px 10px rgba(0, 123, 255, 0.4);
+        }
+
+        /* ── Sweep results section ── */
+        .sweep-results {
+            background: rgba(0, 200, 255, 0.04);
+            border: 2px solid rgba(0, 200, 255, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .sweep-results.show {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .sweep-results h2 {
+            color: #00c8ff;
+            margin-bottom: 6px;
+            font-size: 1.6em;
+        }
+
+        .sweep-results .sweep-subtitle {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-bottom: 24px;
+        }
+
+        .sweep-chart-wrapper {
+            position: relative;
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(0, 200, 255, 0.15);
+        }
+
+        #sweepChart {
+            width: 100% !important;
+            max-height: 380px;
+        }
+
+        .sweep-table-wrapper {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 200, 255, 0.2);
+        }
+
+        #sweepTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.92em;
+        }
+
+        #sweepTable thead tr {
+            background: rgba(0, 130, 180, 0.35);
+        }
+
+        #sweepTable thead th {
+            padding: 12px 18px;
+            text-align: left;
+            color: #00c8ff;
+            font-weight: 600;
+            font-size: 0.95em;
+            border-bottom: 2px solid rgba(0, 200, 255, 0.3);
+        }
+
+        #sweepTable tbody tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background 0.2s;
+        }
+
+        #sweepTable tbody tr:nth-child(even) {
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        #sweepTable tbody tr:hover {
+            background: rgba(0, 200, 255, 0.08);
+        }
+
+        #sweepTable tbody td {
+            padding: 10px 18px;
+            color: #cdd9e8;
+        }
+
+        #sweepTable tbody td.sweep-val-cell {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        #sweepTable tbody td.lm-positive {
+            color: #39ff8a;
+            font-weight: 600;
+        }
+
+        #sweepTable tbody td.lm-negative {
+            color: #ff4d6a;
+            font-weight: 600;
+        }
+
+        #sweepTable tbody td.viable-yes {
+            color: #39ff8a;
+            font-weight: 700;
+        }
+
+        #sweepTable tbody td.viable-no {
+            color: #ff4d6a;
+            font-weight: 700;
+        }
+
+        #sweepTable tbody td.rx-power-cell {
+            color: #00d8ff;
         }
     </style>
 </head>
@@ -555,193 +689,405 @@
 <body>
     <div class="container">
         <h1>Optical Link Budget Calculator</h1>
-        <p class="subtitle">Professional calculation tool with PDF export and save functionality</p>
-
-        <div id="apiStatus" class="api-status offline">
-            ⚠️ Backend API: Checking connection...
-        </div>
+        <p class="subtitle">Professional calculation tool with PDF export, save functionality &amp; parameter sweep</p>
+        <div id="apiStatus" class="api-status offline">⚠️ Backend API: Checking connection...</div>
 
         <div class="form-grid">
-            <!-- Transmitter Power -->
-            <div class="input-group required">
+
+            <!-- TRANSMITTER POWER -->
+            <div class="input-group required" id="ig-txPower">
                 <label for="txPower">Transmitter Power</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="txPower" class="value-input" placeholder="Enter value">
-                    <select id="txPowerUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_txPower" id="sweep_txPower_fixed" value="fixed" checked>
+                        <label for="sweep_txPower_fixed">Fixed</label>
+                        <input type="radio" name="sweep_txPower" id="sweep_txPower_sweep" value="sweep">
+                        <label for="sweep_txPower_sweep">Sweep</label>
+                    </div>
+                    <select id="txPowerUnit" class="unit-select-sm">
                         <option value="dBm">dBm</option>
                         <option value="mW">mW</option>
                         <option value="W">W</option>
                     </select>
+                </div>
+                <div id="fixed-txPower">
+                    <input type="text" inputmode="decimal" id="txPower" class="value-input" placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-txPower">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (dBm)</span><input type="number" id="sweep_txPower_min"
+                                placeholder="-10"></div>
+                        <div class="sweep-field"><span>Max (dBm)</span><input type="number" id="sweep_txPower_max"
+                                placeholder="30"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txPower_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div class="input-error" id="txPower-error"></div>
             </div>
 
-            <!-- Transmitter Efficiency -->
-            <div class="input-group required">
+            <!-- TRANSMITTER EFFICIENCY -->
+            <div class="input-group required" id="ig-txEfficiency">
                 <label for="txEfficiency">Transmitter Efficiency</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="txEfficiency" class="value-input"
-                        placeholder="Enter value">
-                    <select id="txEfficiencyUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_txEfficiency" id="sweep_txEfficiency_fixed" value="fixed"
+                            checked>
+                        <label for="sweep_txEfficiency_fixed">Fixed</label>
+                        <input type="radio" name="sweep_txEfficiency" id="sweep_txEfficiency_sweep" value="sweep">
+                        <label for="sweep_txEfficiency_sweep">Sweep</label>
+                    </div>
+                    <select id="txEfficiencyUnit" class="unit-select-sm">
                         <option value="%">%</option>
                         <option value="decimal">Decimal</option>
                     </select>
+                </div>
+                <div id="fixed-txEfficiency">
+                    <input type="text" inputmode="decimal" id="txEfficiency" class="value-input"
+                        placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-txEfficiency">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (%)</span><input type="number" id="sweep_txEfficiency_min"
+                                placeholder="50"></div>
+                        <div class="sweep-field"><span>Max (%)</span><input type="number" id="sweep_txEfficiency_max"
+                                placeholder="100"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txEfficiency_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div class="input-error" id="txEfficiency-error"></div>
             </div>
 
-            <!-- Receiver Efficiency -->
-            <div class="input-group required">
+            <!-- RECEIVER EFFICIENCY -->
+            <div class="input-group required" id="ig-rxEfficiency">
                 <label for="rxEfficiency">Receiver Efficiency</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="rxEfficiency" class="value-input"
-                        placeholder="Enter value">
-                    <select id="rxEfficiencyUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxEfficiency" id="sweep_rxEfficiency_fixed" value="fixed"
+                            checked>
+                        <label for="sweep_rxEfficiency_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxEfficiency" id="sweep_rxEfficiency_sweep" value="sweep">
+                        <label for="sweep_rxEfficiency_sweep">Sweep</label>
+                    </div>
+                    <select id="rxEfficiencyUnit" class="unit-select-sm">
                         <option value="%">%</option>
                         <option value="decimal">Decimal</option>
                     </select>
                 </div>
+                <div id="fixed-rxEfficiency">
+                    <input type="text" inputmode="decimal" id="rxEfficiency" class="value-input"
+                        placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-rxEfficiency">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (%)</span><input type="number" id="sweep_rxEfficiency_min"
+                                placeholder="50"></div>
+                        <div class="sweep-field"><span>Max (%)</span><input type="number" id="sweep_rxEfficiency_max"
+                                placeholder="100"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxEfficiency_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="rxEfficiency-error"></div>
             </div>
 
-            <!-- Receiver Sensitivity -->
-            <div class="input-group required">
+            <!-- RECEIVER SENSITIVITY -->
+            <div class="input-group required" id="ig-rxSensitivity">
                 <label for="rxSensitivity">Receiver Sensitivity</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="rxSensitivity" class="value-input"
-                        placeholder="Enter value (e.g., -60)">
-                    <select id="rxSensitivityUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxSensitivity" id="sweep_rxSensitivity_fixed" value="fixed"
+                            checked>
+                        <label for="sweep_rxSensitivity_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxSensitivity" id="sweep_rxSensitivity_sweep" value="sweep">
+                        <label for="sweep_rxSensitivity_sweep">Sweep</label>
+                    </div>
+                    <select id="rxSensitivityUnit" class="unit-select-sm">
                         <option value="dBm">dBm</option>
                         <option value="mW">mW</option>
                         <option value="W">W</option>
                     </select>
                 </div>
+                <div id="fixed-rxSensitivity">
+                    <input type="text" inputmode="decimal" id="rxSensitivity" class="value-input"
+                        placeholder="e.g., -60">
+                </div>
+                <div class="sweep-inputs" id="sweep-rxSensitivity">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (dBm)</span><input type="number" id="sweep_rxSensitivity_min"
+                                placeholder="-80"></div>
+                        <div class="sweep-field"><span>Max (dBm)</span><input type="number" id="sweep_rxSensitivity_max"
+                                placeholder="-40"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxSensitivity_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="rxSensitivity-error"></div>
             </div>
 
-            <!-- ⭐ NEW: Rx Optical LNA Gain -->
-            <div class="input-group">
-                <label for="rxLnaGain">
-                    Receiver Optical Low Noise Amplifier (LNA) Gain
-                </label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="rxLnaGain" class="value-input"
-                        placeholder="0 (enter 0 if no LNA)">
-                    <select id="rxLnaGainUnit" class="unit-select">
+            <!-- RX LNA GAIN -->
+            <div class="input-group required" id="ig-rxLnaGain">
+                <label for="rxLnaGain">Receiver Optical Low Noise Amplifier (LNA) Gain</label>
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_fixed" value="fixed" checked>
+                        <label for="sweep_rxLnaGain_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxLnaGain" id="sweep_rxLnaGain_sweep" value="sweep">
+                        <label for="sweep_rxLnaGain_sweep">Sweep</label>
+                    </div>
+                    <select id="rxLnaGainUnit" class="unit-select-sm">
                         <option value="dB">dB</option>
                     </select>
+                </div>
+                <div id="fixed-rxLnaGain">
+                    <input type="text" inputmode="decimal" id="rxLnaGain" class="value-input"
+                        placeholder="0 (enter 0 if no LNA)">
+                </div>
+                <div class="sweep-inputs" id="sweep-rxLnaGain">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_rxLnaGain_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_rxLnaGain_max"
+                                placeholder="20"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxLnaGain_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div class="input-error" id="rxLnaGain-error"></div>
             </div>
 
-            <!-- Optical Wavelength -->
-            <div class="input-group required">
+            <!-- WAVELENGTH -->
+            <div class="input-group required" id="ig-wavelength">
                 <label for="wavelength">Optical Wavelength</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="wavelength" class="value-input"
-                        placeholder="Enter value">
-                    <select id="wavelengthUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_wavelength" id="sweep_wavelength_fixed" value="fixed" checked>
+                        <label for="sweep_wavelength_fixed">Fixed</label>
+                        <input type="radio" name="sweep_wavelength" id="sweep_wavelength_sweep" value="sweep">
+                        <label for="sweep_wavelength_sweep">Sweep</label>
+                    </div>
+                    <select id="wavelengthUnit" class="unit-select-sm">
                         <option value="nm">nm</option>
                         <option value="μm">μm</option>
                         <option value="m">m</option>
                     </select>
                 </div>
+                <div id="fixed-wavelength">
+                    <input type="text" inputmode="decimal" id="wavelength" class="value-input"
+                        placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-wavelength">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (nm)</span><input type="number" id="sweep_wavelength_min"
+                                placeholder="800"></div>
+                        <div class="sweep-field"><span>Max (nm)</span><input type="number" id="sweep_wavelength_max"
+                                placeholder="1600"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_wavelength_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="wavelength-error"></div>
             </div>
 
-            <!-- Transmitter Diameter -->
-            <div class="input-group required">
+            <!-- TX DIAMETER -->
+            <div class="input-group required" id="ig-txDiameter">
                 <label for="txDiameter">Transmitter Diameter</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="txDiameter" class="value-input"
-                        placeholder="Enter value">
-                    <select id="txDiameterUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_txDiameter" id="sweep_txDiameter_fixed" value="fixed" checked>
+                        <label for="sweep_txDiameter_fixed">Fixed</label>
+                        <input type="radio" name="sweep_txDiameter" id="sweep_txDiameter_sweep" value="sweep">
+                        <label for="sweep_txDiameter_sweep">Sweep</label>
+                    </div>
+                    <select id="txDiameterUnit" class="unit-select-sm">
                         <option value="m">m</option>
                         <option value="cm">cm</option>
                         <option value="mm">mm</option>
                     </select>
+                </div>
+                <div id="fixed-txDiameter">
+                    <input type="text" inputmode="decimal" id="txDiameter" class="value-input"
+                        placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-txDiameter">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_txDiameter_min"
+                                placeholder="0.05"></div>
+                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_txDiameter_max"
+                                placeholder="0.5"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txDiameter_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div class="input-error" id="txDiameter-error"></div>
             </div>
 
-            <!-- Receiver Diameter -->
-            <div class="input-group required">
+            <!-- RX DIAMETER -->
+            <div class="input-group required" id="ig-rxDiameter">
                 <label for="rxDiameter">Receiver Diameter</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="rxDiameter" class="value-input"
-                        placeholder="Enter value">
-                    <select id="rxDiameterUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxDiameter" id="sweep_rxDiameter_fixed" value="fixed" checked>
+                        <label for="sweep_rxDiameter_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxDiameter" id="sweep_rxDiameter_sweep" value="sweep">
+                        <label for="sweep_rxDiameter_sweep">Sweep</label>
+                    </div>
+                    <select id="rxDiameterUnit" class="unit-select-sm">
                         <option value="m">m</option>
                         <option value="cm">cm</option>
                         <option value="mm">mm</option>
                     </select>
                 </div>
+                <div id="fixed-rxDiameter">
+                    <input type="text" inputmode="decimal" id="rxDiameter" class="value-input"
+                        placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-rxDiameter">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_rxDiameter_min"
+                                placeholder="0.05"></div>
+                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_rxDiameter_max"
+                                placeholder="0.5"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxDiameter_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="rxDiameter-error"></div>
             </div>
 
-            <!-- Distance -->
-            <div class="input-group required">
+            <!-- DISTANCE -->
+            <div class="input-group required" id="ig-distance">
                 <label for="distance">Distance (Transmitter to Receiver)</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="distance" class="value-input" placeholder="Enter value">
-                    <select id="distanceUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_distance" id="sweep_distance_fixed" value="fixed" checked>
+                        <label for="sweep_distance_fixed">Fixed</label>
+                        <input type="radio" name="sweep_distance" id="sweep_distance_sweep" value="sweep">
+                        <label for="sweep_distance_sweep">Sweep</label>
+                    </div>
+                    <select id="distanceUnit" class="unit-select-sm">
                         <option value="m">m</option>
                         <option value="km">km</option>
                         <option value="cm">cm</option>
                     </select>
                 </div>
+                <div id="fixed-distance">
+                    <input type="text" inputmode="decimal" id="distance" class="value-input" placeholder="Enter value">
+                </div>
+                <div class="sweep-inputs" id="sweep-distance">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (m)</span><input type="number" id="sweep_distance_min"
+                                placeholder="100"></div>
+                        <div class="sweep-field"><span>Max (m)</span><input type="number" id="sweep_distance_max"
+                                placeholder="1000"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_distance_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="distance-error"></div>
             </div>
 
-            <!-- Implementation Loss -->
-            <div class="input-group">
+            <!-- IMPLEMENTATION LOSS -->
+            <div class="input-group" id="ig-implLoss">
                 <label for="implLoss">Implementation Loss (Optional)</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="implLoss" class="value-input" placeholder="0">
-                    <select id="implLossUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_implLoss" id="sweep_implLoss_fixed" value="fixed" checked>
+                        <label for="sweep_implLoss_fixed">Fixed</label>
+                        <input type="radio" name="sweep_implLoss" id="sweep_implLoss_sweep" value="sweep">
+                        <label for="sweep_implLoss_sweep">Sweep</label>
+                    </div>
+                    <select id="implLossUnit" class="unit-select-sm">
                         <option value="dB">dB</option>
                         <option value="linear">Linear</option>
                     </select>
+                </div>
+                <div id="fixed-implLoss">
+                    <input type="text" inputmode="decimal" id="implLoss" class="value-input" placeholder="0">
+                </div>
+                <div class="sweep-inputs" id="sweep-implLoss">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_implLoss_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_implLoss_max"
+                                placeholder="10"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_implLoss_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
                 </div>
                 <div class="input-error" id="implLoss-error"></div>
             </div>
 
-            <!-- Coupling Loss -->
-            <div class="input-group">
+            <!-- COUPLING LOSS -->
+            <div class="input-group" id="ig-couplingLoss">
                 <label for="couplingLoss">Coupling Loss (Optional)</label>
-                <div class="input-row">
-                    <input type="text" inputmode="decimal" id="couplingLoss" class="value-input" placeholder="0">
-                    <select id="couplingLossUnit" class="unit-select">
+                <div class="sweep-toggle-row">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_couplingLoss" id="sweep_couplingLoss_fixed" value="fixed"
+                            checked>
+                        <label for="sweep_couplingLoss_fixed">Fixed</label>
+                        <input type="radio" name="sweep_couplingLoss" id="sweep_couplingLoss_sweep" value="sweep">
+                        <label for="sweep_couplingLoss_sweep">Sweep</label>
+                    </div>
+                    <select id="couplingLossUnit" class="unit-select-sm">
                         <option value="dB">dB</option>
                         <option value="linear">Linear</option>
                     </select>
                 </div>
+                <div id="fixed-couplingLoss">
+                    <input type="text" inputmode="decimal" id="couplingLoss" class="value-input" placeholder="0">
+                </div>
+                <div class="sweep-inputs" id="sweep-couplingLoss">
+                    <div class="sweep-inputs-row">
+                        <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_couplingLoss_min"
+                                placeholder="0"></div>
+                        <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_couplingLoss_max"
+                                placeholder="10"></div>
+                        <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_couplingLoss_steps"
+                                placeholder="10" min="1"></div>
+                    </div>
+                </div>
                 <div class="input-error" id="couplingLoss-error"></div>
             </div>
 
-            <!-- Transmitter Pointing -->
-            <div class="input-group">
+            <!-- TX POINTING -->
+            <div class="input-group" id="ig-txPointing">
                 <label>Transmitter Pointing</label>
                 <div class="toggle-group">
-                    <input type="radio" name="txPointingMode" value="manual" id="txModeManual" checked
-                        onchange="togglePointingMode('tx')">
+                    <input type="radio" name="txPointingMode" value="manual" id="txModeManual" checked>
                     <label for="txModeManual">Manual Loss (dB)</label>
-                    <input type="radio" name="txPointingMode" value="error" id="txModeError"
-                        onchange="togglePointingMode('tx')">
+                    <input type="radio" name="txPointingMode" value="error" id="txModeError">
                     <label for="txModeError">Pointing Error</label>
                 </div>
-
+                <div class="sweep-toggle-row" style="margin-bottom:8px;">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_txPointing" id="sweep_txPointing_fixed" value="fixed" checked>
+                        <label for="sweep_txPointing_fixed">Fixed</label>
+                        <input type="radio" name="sweep_txPointing" id="sweep_txPointing_sweep" value="sweep">
+                        <label for="sweep_txPointing_sweep">Sweep</label>
+                    </div>
+                </div>
                 <div id="txPointingManualInput">
-                    <div class="input-row">
+                    <div id="fixed-txPointing" class="input-row">
                         <input type="text" inputmode="decimal" id="txPointingLoss" class="value-input" placeholder="0">
                         <select id="txPointingLossUnit" class="unit-select">
                             <option value="dB">dB</option>
                             <option value="linear">Linear</option>
                         </select>
                     </div>
+                    <div class="sweep-inputs" id="sweep-txPointing">
+                        <div class="sweep-inputs-row">
+                            <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_txPointing_min"
+                                    placeholder="0"></div>
+                            <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_txPointing_max"
+                                    placeholder="10"></div>
+                            <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_txPointing_steps"
+                                    placeholder="10" min="1"></div>
+                        </div>
+                    </div>
                 </div>
-
-                <div id="txPointingErrorInput" style="display: none;">
+                <div id="txPointingErrorInput" style="display:none;">
                     <div class="input-row">
                         <input type="text" inputmode="decimal" id="txPointingError" class="value-input"
                             placeholder="Enter error">
@@ -751,36 +1097,48 @@
                             <option value="nrad">nrad</option>
                         </select>
                     </div>
-                    <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
-                        Calculated Loss: L = exp(-G_tx * θ²)
-                    </div>
+                    <div style="font-size:0.8em;color:#aaa;margin-top:5px;">Calculated Loss: L = exp(-G_tx · θ²)</div>
                 </div>
                 <div class="input-error" id="txPointingLoss-error"></div>
             </div>
 
-            <!-- Receiver Pointing -->
-            <div class="input-group">
+            <!-- RX POINTING -->
+            <div class="input-group" id="ig-rxPointing">
                 <label>Receiver Pointing</label>
                 <div class="toggle-group">
-                    <input type="radio" name="rxPointingMode" value="manual" id="rxModeManual" checked
-                        onchange="togglePointingMode('rx')">
+                    <input type="radio" name="rxPointingMode" value="manual" id="rxModeManual" checked>
                     <label for="rxModeManual">Manual Loss (dB)</label>
-                    <input type="radio" name="rxPointingMode" value="error" id="rxModeError"
-                        onchange="togglePointingMode('rx')">
+                    <input type="radio" name="rxPointingMode" value="error" id="rxModeError">
                     <label for="rxModeError">Pointing Error</label>
                 </div>
-
+                <div class="sweep-toggle-row" style="margin-bottom:8px;">
+                    <div class="sweep-pill">
+                        <input type="radio" name="sweep_rxPointing" id="sweep_rxPointing_fixed" value="fixed" checked>
+                        <label for="sweep_rxPointing_fixed">Fixed</label>
+                        <input type="radio" name="sweep_rxPointing" id="sweep_rxPointing_sweep" value="sweep">
+                        <label for="sweep_rxPointing_sweep">Sweep</label>
+                    </div>
+                </div>
                 <div id="rxPointingManualInput">
-                    <div class="input-row">
+                    <div id="fixed-rxPointing" class="input-row">
                         <input type="text" inputmode="decimal" id="rxPointingLoss" class="value-input" placeholder="0">
                         <select id="rxPointingLossUnit" class="unit-select">
                             <option value="dB">dB</option>
                             <option value="linear">Linear</option>
                         </select>
                     </div>
+                    <div class="sweep-inputs" id="sweep-rxPointing">
+                        <div class="sweep-inputs-row">
+                            <div class="sweep-field"><span>Min (dB)</span><input type="number" id="sweep_rxPointing_min"
+                                    placeholder="0"></div>
+                            <div class="sweep-field"><span>Max (dB)</span><input type="number" id="sweep_rxPointing_max"
+                                    placeholder="10"></div>
+                            <div class="sweep-field"><span>Steps</span><input type="number" id="sweep_rxPointing_steps"
+                                    placeholder="10" min="1"></div>
+                        </div>
+                    </div>
                 </div>
-
-                <div id="rxPointingErrorInput" style="display: none;">
+                <div id="rxPointingErrorInput" style="display:none;">
                     <div class="input-row">
                         <input type="text" inputmode="decimal" id="rxPointingError" class="value-input"
                             placeholder="Enter error">
@@ -790,55 +1148,36 @@
                             <option value="nrad">nrad</option>
                         </select>
                     </div>
-                    <div style="font-size: 0.8em; color: #aaa; margin-top: 5px;">
-                        Calculated Loss: L = exp(-G_rx * θ²)
-                    </div>
+                    <div style="font-size:0.8em;color:#aaa;margin-top:5px;">Calculated Loss: L = exp(-G_rx · θ²)</div>
                 </div>
                 <div class="input-error" id="rxPointingLoss-error"></div>
             </div>
-        </div>
+
+        </div><!-- /form-grid -->
 
         <div class="button-group">
-            <button class="calculate-btn" onclick="calculateLinkBudget()" id="calculateBtn">Calculate</button>
+            <button class="calculate-btn" id="calculateBtn" onclick="handleCalculateClick()">Calculate</button>
             <button class="reset-btn" onclick="resetForm()">Reset</button>
-            <button class="save-btn" onclick="saveCalculation()" id="saveBtn" disabled>Save Calculation</button>
-            <button class="pdf-btn" onclick="exportToPDF()" id="pdfBtn" disabled>Export to PDF</button>
+            <button class="save-btn" id="saveBtn" disabled onclick="saveCalculation()">Save Calculation</button>
+            <button class="pdf-btn" id="pdfBtn" disabled onclick="exportToPDF()">Export to PDF</button>
         </div>
 
         <div class="error" id="errorMsg"></div>
         <div class="success" id="successMsg"></div>
 
-        <!-- ═══════════════════════════════════════════════════════════════ -->
-        <!--  RESULTS PANEL                                                  -->
-        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SINGLE-POINT RESULTS -->
         <div class="results" id="results">
             <h2>Calculation Results</h2>
-
-            <!-- ── Link Margin highlight box (after LNA) ─────────────────── -->
             <div id="linkMarginBox" class="link-margin-box">
-                <div class="title">Link Margin &nbsp;<small style="font-size:0.6em;color:#aaa;">(Calculated after LNA
-                        Amplification)</small></div>
+                <div class="title">Link Margin (After LNA)</div>
                 <div class="margin-value" id="linkMarginValue">0.00 dB</div>
                 <div class="status" id="linkStatus">LINK STATUS</div>
-
-                <!-- Three power rows inside the margin box -->
-                <div class="link-margin-power-details">
-                    <div class="prow">
-                        <span class="prow-label">Rx Power (Without LNA):</span>
-                        <span class="prow-value plain-color" id="lmRxPowerNoLna">—</span>
-                    </div>
-                    <div class="prow">
-                        <span class="prow-label">Rx Power (With LNA):</span>
-                        <span class="prow-value lna-color" id="lmRxPowerLna">—</span>
-                    </div>
-                    <div class="prow">
-                        <span class="prow-label">Rx Sensitivity (Required):</span>
-                        <span class="prow-value" id="lmSensitivity">—</span>
-                    </div>
+                <div class="lm-power-details">
+                    <div>📡 Rx Power (No LNA): <span id="lmRxPowerNoLna">-</span></div>
+                    <div>🔊 Rx Power (With LNA): <span id="lmRxPowerLna">-</span></div>
+                    <div>🎯 Required Sensitivity: <span id="lmSensitivity">-</span></div>
                 </div>
             </div>
-
-            <!-- ── Input Summary ──────────────────────────────────────────── -->
             <div class="result-section">
                 <h3>Input Parameters</h3>
                 <div class="result-grid">
@@ -860,8 +1199,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- ── Antenna Gains ──────────────────────────────────────────── -->
             <div class="result-section">
                 <h3>Antenna Gains</h3>
                 <div class="result-grid">
@@ -875,8 +1212,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- ── Beam Divergence ────────────────────────────────────────── -->
             <div class="result-section">
                 <h3>Beam Divergence</h3>
                 <div class="result-grid">
@@ -890,8 +1225,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- ── Losses ─────────────────────────────────────────────────── -->
             <div class="result-section">
                 <h3>Losses</h3>
                 <div class="result-grid">
@@ -905,22 +1238,17 @@
                     </div>
                 </div>
             </div>
-
-            <!-- ── Power Budget — now shows 3 rows ───────────────────────── -->
             <div class="result-section">
                 <h3>Power Budget</h3>
                 <div class="result-grid">
-                    <!-- 1. Rx power WITHOUT LNA -->
-                    <div class="result-item highlight">
-                        <div class="label">Rx Power (Without LNA Amplification)</div>
+                    <div class="result-item">
+                        <div class="label">Rx Power (Without LNA)</div>
                         <div class="value" id="resultRxPowerNoLna">-</div>
                     </div>
-                    <!-- 2. Rx power WITH LNA -->
-                    <div class="result-item highlight-lna">
-                        <div class="label">Rx Power (With LNA Amplification)</div>
+                    <div class="result-item">
+                        <div class="label">Rx Power (With LNA)</div>
                         <div class="value" id="resultRxPowerLna">-</div>
                     </div>
-                    <!-- 3. Link Margin (after LNA) — same as big box but handy in table too -->
                     <div class="result-item" id="resultLinkMarginItem">
                         <div class="label">Link Margin (After LNA)</div>
                         <div class="value" id="resultLinkMarginSmall">-</div>
@@ -932,16 +1260,37 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <script src="app_v2.js"></script>
+        <!-- SWEEP RESULTS -->
+        <div class="sweep-results" id="sweepResults">
+            <h2>📊 Parameter Sweep Analysis (<span id="sweepParamLabel">-</span>)</h2>
+            <p class="sweep-subtitle" id="sweepSubtitle">-</p>
+            <div class="sweep-chart-wrapper">
+                <canvas id="sweepChart"></canvas>
+            </div>
+            <div class="sweep-table-wrapper">
+                <table id="sweepTable">
+                    <thead>
+                        <tr>
+                            <th id="sweepTableParamHeader">Parameter</th>
+                            <th>Link Margin (dB)</th>
+                            <th>Rx Power LNA (dBm)</th>
+                            <th>Path Loss (dB)</th>
+                            <th>Viable?</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sweepTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /container -->
+
+    <script src="app_v2.js?v=4"></script>
     <script>
-        // Unregister service workers in development/debug
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function (registrations) {
-                for (let registration of registrations) {
-                    registration.unregister();
-                }
+                for (let r of registrations) r.unregister();
             });
         }
     </script>
